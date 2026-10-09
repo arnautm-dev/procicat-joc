@@ -27,7 +27,7 @@ La interfície està dividida en tres blocs principals:
 
 2. Mapa principal
    - S’utilitza Leaflet per crear un mapa interactiu centrat a Catalunya.
-   - La capa base és OpenStreetMap.
+   - La capa base utilitza rajoles d’OpenStreetMap.de amb dades d’OpenStreetMap, en lloc del servidor estàndard de rajoles d’OpenStreetMap.
    - Les incidències es representen com a marcadors amb icones customitzades segons el nivell.
    - Hi ha capes temàtiques addicionals per municipis i comarques.
 
@@ -120,7 +120,7 @@ El projecte importa recursos externs des de CDN:
 
 - Leaflet per a mapes interactius
 - TopoJSON client per transformar geometries
-- OpenStreetMap com a font base de mapes
+- Rajoles d’OpenStreetMap.de (amb atribució a OpenStreetMap)
 - Geometries administratives des d’un repositori extern de GitHub
 
 No hi ha dependències de Node ni de package manager en la versió actual, per la qual cosa el projecte és executat directament com a pàgina web estàtica.

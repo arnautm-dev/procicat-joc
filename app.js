@@ -170,7 +170,7 @@
         zoomSnap: 0.25
       }).setView([41.83, 1.65], 7.4);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      L.tileLayer("https://tile.openstreetmap.de/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: ""
       }).addTo(map);
@@ -1491,4 +1491,3 @@
 
       renderIncidentList();
       if (selectedId) setTimeout(() => selectIncident(selectedId, false), 80);
-
