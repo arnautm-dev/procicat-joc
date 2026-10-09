@@ -125,16 +125,27 @@
         ["Barcelonès", "orange"],
         ["Tarragonès", "red"]
       ]);
+      const municipalityStatuses = new Map([
+        ["17160", "evacuated"],
+        ["43148", "confined"],
+        ["08113", "confined"]
+      ]);
       const alertColors = {
         yellow: "#f2d54a",
         orange: "#f49a4b",
         red: "#f05252"
       };
-      const evacuationStatus = new Map([
-        ["17160", { status: "Evacuació", color: "#f05252" }],
-        ["43148", { status: "Confinament", color: "#e8c35c" }],
-        ["08113", { status: "Confinament", color: "#e8c35c" }]
-      ]);
+      const municipalityColors = {
+        evacuated: "#f05252",
+        confined: "#e8c35c"
+      };
+      let municipalityFeatures = [];
+      let countyFeatures = [];
+      let municipalitiesByCode = new Map();
+      let municipalitiesByName = new Map();
+      let countiesByCode = new Map();
+      let countiesByName = new Map();
+      let boundaryDataLoaded = false;
 
       function createRadarLayer() {
         const radarSvg = `
@@ -197,42 +208,161 @@
         }).features;
       }
 
-      function createEvacuationLayer(municipalityFeatures) {
-        const affectedMunicipalities = municipalityFeatures.filter(feature =>
-          evacuationStatus.has(feature.properties.codi_municipi_5)
-        );
-        if (affectedMunicipalities.length !== evacuationStatus.size) {
-          throw new Error("No s’han pogut trobar tots els municipis d’exemple a les dades geogràfiques.");
-        }
-        return L.geoJSON(affectedMunicipalities, {
-          style: feature => {
-            const area = evacuationStatus.get(feature.properties.codi_municipi_5);
-            return {
-              color: area.color,
-              weight: 2,
-              opacity: 1,
-              fillColor: area.color,
-              fillOpacity: 0.42
-            };
+      function evacuationStyle(feature) {
+        const status = municipalityStatuses.get(feature.properties.codi_municipi_5);
+        const color = municipalityColors[status];
+        return {
+          color,
+          weight: 2,
+          opacity: 1,
+          fillColor: color,
+          fillOpacity: 0.42
+        };
+      }
+
+      function createEvacuationLayer() {
+        return L.geoJSON([], { style: evacuationStyle });
+      }
+
+      function refreshEvacuationLayer() {
+        const layer = thematicLayers.evacuations;
+        if (!layer) return;
+        layer.clearLayers();
+        municipalityFeatures.forEach(feature => {
+          if (municipalityStatuses.has(feature.properties.codi_municipi_5)) {
+            layer.addData(feature);
           }
         });
       }
 
-      function createAlertLayer(countyFeatures) {
-        return L.geoJSON(countyFeatures, {
-          style: feature => {
-            const level = alertLevels.get(feature.properties.nom_comarca);
-            const color = level ? alertColors[level] : "#73838a";
-            return {
-              color,
-              weight: 1.4,
-              opacity: level ? 0.95 : 0.7,
-              fillColor: color,
-              fillOpacity: level ? 0.36 : 0
-            };
-          }
-        });
+      function countyStyle(feature) {
+        const level = alertLevels.get(feature.properties.nom_comarca);
+        const color = level ? alertColors[level] : "#73838a";
+        return {
+          color,
+          weight: 1.4,
+          opacity: level ? 0.95 : 0.7,
+          fillColor: color,
+          fillOpacity: level ? 0.36 : 0
+        };
       }
+
+      function createAlertLayer(features) {
+        return L.geoJSON(features, { style: countyStyle });
+      }
+
+      function normalizeAdministrativeName(value) {
+        return String(value).trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("ca");
+      }
+
+      function requireBoundaryData() {
+        if (!boundaryDataLoaded) {
+          throw new Error("Els límits encara s’estan carregant. Torna-ho a provar en uns segons.");
+        }
+      }
+
+      function findAdministrativeFeature(value, byCode, byName, kind) {
+        requireBoundaryData();
+        if (typeof value !== "string" || !value.trim()) {
+          throw new TypeError(`Indica el nom o el codi del ${kind}.`);
+        }
+        const feature = byCode.get(value.trim()) || byName.get(normalizeAdministrativeName(value));
+        if (!feature) {
+          throw new RangeError(`No s’ha trobat el ${kind} "${value}". Consulta els noms amb listMunicipalityStatuses() o listCountyAlerts().`);
+        }
+        return feature;
+      }
+
+      function getMunicipalityStatus(municipality) {
+        const feature = findAdministrativeFeature(municipality, municipalitiesByCode, municipalitiesByName, "municipi");
+        const code = feature.properties.codi_municipi_5;
+        return {
+          name: feature.properties.nom_municipi,
+          code,
+          county: feature.properties.nom_comarca,
+          status: municipalityStatuses.get(code) || "none"
+        };
+      }
+
+      function setMunicipalityStatus(municipality, status) {
+        const feature = findAdministrativeFeature(municipality, municipalitiesByCode, municipalitiesByName, "municipi");
+        const normalizedStatus = status == null || status === "" ? "none" : normalizeAdministrativeName(status);
+        const validStatuses = {
+          evacuated: "evacuated",
+          evacuacio: "evacuated",
+          confined: "confined",
+          confinament: "confined",
+          none: "none",
+          cap: "none"
+        };
+        const nextStatus = validStatuses[normalizedStatus];
+        if (!nextStatus) {
+          throw new RangeError('Estat no vàlid. Utilitza "evacuated", "confined" o "none".');
+        }
+        const code = feature.properties.codi_municipi_5;
+        if (nextStatus === "none") municipalityStatuses.delete(code);
+        else municipalityStatuses.set(code, nextStatus);
+        refreshEvacuationLayer();
+        return getMunicipalityStatus(code);
+      }
+
+      function listMunicipalityStatuses(options = {}) {
+        requireBoundaryData();
+        const affectedOnly = options.affectedOnly === true;
+        return municipalityFeatures
+          .filter(feature => !affectedOnly || municipalityStatuses.has(feature.properties.codi_municipi_5))
+          .map(feature => getMunicipalityStatus(feature.properties.codi_municipi_5));
+      }
+
+      function getCountyAlert(county) {
+        const feature = findAdministrativeFeature(county, countiesByCode, countiesByName, "comarca");
+        return {
+          name: feature.properties.nom_comarca,
+          code: feature.properties.codi_comarca,
+          level: alertLevels.get(feature.properties.nom_comarca) || "none"
+        };
+      }
+
+      function setCountyAlert(county, level) {
+        const feature = findAdministrativeFeature(county, countiesByCode, countiesByName, "comarca");
+        const normalizedLevel = level == null || level === "" ? "none" : normalizeAdministrativeName(level);
+        const validLevels = {
+          yellow: "yellow",
+          groc: "yellow",
+          orange: "orange",
+          taronja: "orange",
+          red: "red",
+          vermell: "red",
+          none: "none",
+          cap: "none"
+        };
+        const nextLevel = validLevels[normalizedLevel];
+        if (!nextLevel) {
+          throw new RangeError('Nivell no vàlid. Utilitza "yellow", "orange", "red" o "none".');
+        }
+        const name = feature.properties.nom_comarca;
+        if (nextLevel === "none") alertLevels.delete(name);
+        else alertLevels.set(name, nextLevel);
+        thematicLayers.alert.setStyle(countyStyle);
+        return getCountyAlert(feature.properties.codi_comarca);
+      }
+
+      function listCountyAlerts(options = {}) {
+        requireBoundaryData();
+        const affectedOnly = options.affectedOnly === true;
+        return countyFeatures
+          .filter(feature => !affectedOnly || alertLevels.has(feature.properties.nom_comarca))
+          .map(feature => getCountyAlert(feature.properties.codi_comarca));
+      }
+
+      Object.assign(window, {
+        setMunicipalityStatus,
+        getMunicipalityStatus,
+        listMunicipalityStatuses,
+        setCountyAlert,
+        getCountyAlert,
+        listCountyAlerts
+      });
 
       async function loadBoundaryLayers() {
         const status = document.getElementById("map-data-status");
@@ -252,32 +382,54 @@
             countyResponse.json(),
             municipalityResponse.json()
           ]);
-          const countyFeatures = uniqueTopologyFeatures(
+          const loadedCountyFeatures = uniqueTopologyFeatures(
             countyTopology,
             "dts_comarques_cat_2025",
             "codi_comarca"
           );
-          const municipalityFeatures = uniqueTopologyFeatures(
+          const loadedMunicipalityFeatures = uniqueTopologyFeatures(
             municipalityTopology,
             "dts_municipis_cat_2025",
             "codi_municipi_5"
           );
-          if (countyFeatures.length !== 43 || municipalityFeatures.length !== 947) {
-            throw new Error(`S’esperaven 43 comarques i 947 municipis; s’han rebut ${countyFeatures.length} i ${municipalityFeatures.length}.`);
+          if (loadedCountyFeatures.length !== 43 || loadedMunicipalityFeatures.length !== 947) {
+            throw new Error(`S’esperaven 43 comarques i 947 municipis; s’han rebut ${loadedCountyFeatures.length} i ${loadedMunicipalityFeatures.length}.`);
           }
-          thematicLayers.evacuations = createEvacuationLayer(municipalityFeatures);
+          countyFeatures = loadedCountyFeatures;
+          municipalityFeatures = loadedMunicipalityFeatures;
+          municipalitiesByCode = new Map(municipalityFeatures.map(feature => [
+            feature.properties.codi_municipi_5,
+            feature
+          ]));
+          municipalitiesByName = new Map(municipalityFeatures.map(feature => [
+            normalizeAdministrativeName(feature.properties.nom_municipi),
+            feature
+          ]));
+          countiesByCode = new Map(countyFeatures.map(feature => [
+            feature.properties.codi_comarca,
+            feature
+          ]));
+          countiesByName = new Map(countyFeatures.map(feature => [
+            normalizeAdministrativeName(feature.properties.nom_comarca),
+            feature
+          ]));
+          thematicLayers.evacuations = createEvacuationLayer();
           thematicLayers.alert = createAlertLayer(countyFeatures);
+          boundaryDataLoaded = true;
+          refreshEvacuationLayer();
 
           status.hidden = true;
           status.classList.remove("error");
           if (activeLayerName !== "incidents") {
             setActiveLayer(activeLayerName);
           }
+          return true;
         } catch (error) {
           console.error("No s’han pogut carregar els límits municipals i comarcals.", error);
           status.textContent = "No s’han pogut carregar els límits reals. Comprova la connexió i torna a carregar la pàgina.";
           status.classList.add("error");
           status.hidden = false;
+          return false;
         }
       }
 
@@ -491,4 +643,4 @@
       map.on("click", event => {
         if (selectedId && !event.originalEvent.target.closest(".leaflet-marker-icon")) closeDetail();
       });
-      loadBoundaryLayers();
+      window.adminStatusReady = loadBoundaryLayers();
