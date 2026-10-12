@@ -1,0 +1,19 @@
+{
+    "id": "/",
+    "name": "PROCICOORD — Simulador de Protecció Civil",
+    "short_name": "PROCICOORD",
+    "description": "Simulador web de gestió d'emergències i Protecció Civil.",
+    "lang": "ca",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#111827",
+    "theme_color": "#111827",
+    "icons": [
+        {
+            "src": "/public/favicon.png",
+            "sizes": "1254x1254",
+            "type": "image/png"
+        }
+    ]
+}
