@@ -1091,7 +1091,7 @@
               <div><span class="info-label">Municipi / zona</span><span class="info-value">${currentIncident.shortLocation}</span></div>
               <div><span class="info-label">Hora d’inici</span><span class="info-value">${currentIncident.time || formatSimulationClock()} · Simulació</span></div>
               <div><span class="info-label">Gravetat</span><span class="info-value">${currentIncident.severity || getSeverityFromRisk(currentIncident.risk).severity}</span></div>
-              <div><span class="info-label">Risc població</span><span class="info-value">${Math.round(currentIncident.risk || 52)}%</span></div>
+              <div><span class="info-label">Risc població</span><span class="info-value" data-incident-risk>${Math.round(currentIncident.risk || 52)}%</span></div>
             </div>
           </section>
           <section class="detail-section">
@@ -1336,10 +1336,12 @@
 
       function evolveIncidents(secondsElapsed) {
         const factor = secondsElapsed / 60;
+        let shouldRefreshIncidentList = false;
         for (const incident of incidents) {
           hydrateIncident(incident);
           ensureIncidentState(incident);
           if (/Tancat|Resolut/i.test(incident.state)) continue;
+          let incidentDetailsChanged = false;
 
           const threat = incident.typeKey === "incendi" ? 0.8 : incident.typeKey === "inundacio" ? 0.55 : incident.typeKey === "pluges" ? 0.4 : incident.typeKey === "accident-trafic" ? 0.38 : incident.typeKey === "accident-quimic" ? 0.7 : incident.typeKey === "sanitaria" ? 0.2 : 0.3;
           const trend = Math.sin((simulation.gameTime / 180000) + incident.coordinates[0] + incident.coordinates[1]) * 0.6;
@@ -1354,12 +1356,16 @@
             incident.update = `Gravetat actualitzada a ${nextSeverity.severity.toLowerCase()} segons l’evolució del focus.`;
             incident.history = incident.history || [];
             incident.history.unshift({ time: formatSimulationClock(), text: `Gravetat actualitzada: ${nextSeverity.severity}.` });
+            shouldRefreshIncidentList = true;
+            incidentDetailsChanged = true;
           }
 
           if (incident.risk > 76 && !/En intervenció|Controlat|Resolut|Tancat/.test(incident.state)) {
             incident.state = "En intervenció";
             incident.update = "L’incident requereix intervenció activa i coordinació dels recursos disponibles.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Estat actualitzat a En intervenció." });
+            shouldRefreshIncidentList = true;
+            incidentDetailsChanged = true;
           }
 
           const elapsedAssignedTime = incident.assignedAt ? (simulation.gameTime - incident.assignedAt) : 0;
@@ -1367,17 +1373,25 @@
             incident.state = "Controlat";
             incident.update = "L’incident està controlat i se’n monitoritza la resolució.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Incidència controlada per l’equip assignat." });
+            shouldRefreshIncidentList = true;
+            incidentDetailsChanged = true;
           }
 
           if (incident.resourcesAssigned > 0 && elapsedAssignedTime > 90 * 60 * 1000 && !/Resolut|Tancat/.test(incident.state)) {
             incident.state = "Resolut";
             incident.update = "L’incident s’ha resolt i queda disponible a l’historial operatiu.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Incidència resolta i tancada en l’historial." });
+            shouldRefreshIncidentList = true;
+            incidentDetailsChanged = true;
           }
 
-          if (selectedId === incident.id) renderDetail(incident);
+          if (selectedId === incident.id) {
+            const riskDisplay = detailPanel.querySelector("[data-incident-risk]");
+            if (riskDisplay) riskDisplay.textContent = `${Math.round(incident.risk)}%`;
+            if (incidentDetailsChanged) renderDetail(incident);
+          }
         }
-        refreshIncidentList();
+        if (shouldRefreshIncidentList) refreshIncidentList();
       }
 
       function stepSimulation() {
