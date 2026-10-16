@@ -116,7 +116,7 @@
         },
         rain: {
           id: "rain",
-          name: "Plujes molt intenses",
+          name: "Pluges molt intenses",
           icon: "⛈️",
           color: "#4da7d6",
           defaultRisk: 54,
@@ -214,7 +214,87 @@
       let municipalitiesByName = new Map();
       let countiesByCode = new Map();
       let countiesByName = new Map();
+      let scenarioMunicipalityLocations = [];
       let boundaryDataLoaded = false;
+      const municipalityPopulationWeights = new Map(Object.entries({
+        "Barcelona": 160,
+        "L'Hospitalet de Llobregat": 28,
+        "Terrassa": 23,
+        "Badalona": 22,
+        "Sabadell": 22,
+        "Lleida": 14,
+        "Tarragona": 14,
+        "Mataró": 13,
+        "Santa Coloma de Gramenet": 12,
+        "Reus": 11,
+        "Girona": 10,
+        "Sant Cugat del Vallès": 10,
+        "Cornellà de Llobregat": 9,
+        "Sant Boi de Llobregat": 9,
+        "Manresa": 8,
+        "Rubí": 8,
+        "Vilanova i la Geltrú": 7,
+        "Viladecans": 7,
+        "Castelldefels": 7,
+        "El Prat de Llobregat": 7,
+        "Granollers": 7,
+        "Cerdanyola del Vallès": 6,
+        "Vic": 5,
+        "Figueres": 5,
+        "Blanes": 5,
+        "Olot": 4,
+        "Igualada": 4,
+        "Tortosa": 4,
+        "Salou": 4,
+        "Lloret de Mar": 4,
+        "Sant Feliu de Llobregat": 4,
+        "Sant Joan Despí": 4,
+        "Vilafranca del Penedès": 4,
+        "Esplugues de Llobregat": 4,
+        "Gavà": 4,
+        "Ripollet": 4,
+        "Sant Adrià de Besòs": 4,
+        "Montcada i Reixac": 4,
+        "Sant Pere de Ribes": 3,
+        "Sant Vicenç dels Horts": 3,
+        "Pineda de Mar": 3,
+        "Vila-seca": 3,
+        "El Vendrell": 3,
+        "Cambrils": 3,
+        "Calafell": 3,
+        "Premià de Mar": 3,
+        "Valls": 3,
+        "Martorell": 3,
+        "Mollet del Vallès": 3,
+        "Tàrrega": 2,
+        "Mollerussa": 2,
+        "Balaguer": 2,
+        "Banyoles": 2,
+        "Palamós": 2,
+        "Roses": 2,
+        "Caldes de Montbui": 2,
+        "Cardedeu": 2,
+        "Sant Celoni": 2,
+        "Canovelles": 2,
+        "Parets del Vallès": 2,
+        "Sant Quirze del Vallès": 2,
+        "Sant Just Desvern": 2,
+        "Cunit": 2,
+        "Mont-roig del Camp": 2,
+        "La Bisbal d'Empordà": 2,
+        "Sant Carles de la Ràpita": 2,
+        "Berga": 2,
+        "Cervera": 2,
+        "Olesa de Montserrat": 2,
+        "Castellar del Vallès": 2,
+        "Barberà del Vallès": 2,
+        "Sant Andreu de la Barca": 2,
+        "Salt": 2,
+        "Palafrugell": 2,
+        "Sant Feliu de Guíxols": 2,
+        "Amposta": 2,
+        "La Seu d'Urgell": 1
+      }).map(([name, weight]) => [normalizeAdministrativeName(name), weight]));
 
       function createRadarLayer() {
         const radarSvg = `
@@ -474,6 +554,13 @@
             normalizeAdministrativeName(feature.properties.nom_municipi),
             feature
           ]));
+          scenarioMunicipalityLocations = municipalityFeatures.map(feature => {
+            const bounds = L.geoJSON(feature).getBounds();
+            return {
+              feature,
+              coordinates: bounds.isValid() ? bounds.getCenter() : null
+            };
+          }).filter(municipality => municipality.coordinates);
           countiesByCode = new Map(countyFeatures.map(feature => [
             feature.properties.codi_comarca,
             feature
@@ -744,6 +831,11 @@
           background: rgba(31, 84, 74, 0.9);
           color: #d4fff2;
         }
+        .simulator-button.pause {
+          border-color: rgb(181 149 86 / 40%);
+          background: rgb(78 71 55 / 90%);
+          color: #fff1d4;
+        }
         .simulator-speed {
           display: inline-flex;
           align-items: center;
@@ -827,7 +919,6 @@
         controls.className = "simulator-toolbar";
         controls.innerHTML = `
           <button id="toggle-sim" class="simulator-button primary" type="button">Iniciar</button>
-          <button id="pause-sim" class="simulator-button" type="button">Pausa</button>
           <label class="simulator-speed">
             <span>Velocitat</span>
             <select id="sim-speed" aria-label="Velocitat de simulació">
@@ -849,15 +940,10 @@
         statusBar.appendChild(clock);
 
         const toggleButton = document.getElementById("toggle-sim");
-        const pauseButton = document.getElementById("pause-sim");
         const speedSelect = document.getElementById("sim-speed");
         toggleButton.addEventListener("click", () => {
           if (!simulation.started) startSimulation();
-          else stopSimulation();
-        });
-        pauseButton.addEventListener("click", () => {
-          if (!simulation.started) return;
-          if (simulation.running) pauseSimulation();
+          else if (simulation.running) pauseSimulation();
           else resumeSimulation();
         });
         speedSelect.addEventListener("change", event => {
@@ -962,7 +1048,7 @@
         if (directMatch) return directMatch;
         if (input.includes("incendi")) return incidentTypeCatalog.forestFire;
         if (input.includes("inund") || input.includes("riuada") || input.includes("riu")) return incidentTypeCatalog.flood;
-        if (input.includes("pluja") || input.includes("tempest")) return incidentTypeCatalog.rain;
+        if (input.includes("pluj") || input.includes("plug") || input.includes("tempest")) return incidentTypeCatalog.rain;
         if (input.includes("tr\xe0nsit") || input.includes("accident") && input.includes("carretera")) return incidentTypeCatalog.traffic;
         if (input.includes("qu\xedmic") || input.includes("quimic")) return incidentTypeCatalog.chemical;
         if (input.includes("sanit") || input.includes("hospital")) return incidentTypeCatalog.medical;
@@ -1261,23 +1347,64 @@
 
       function generateScenarioIncident() {
         const templates = [
-          { type: "Incendi forestal", shortLocation: "Girona", coordinates: [41.98, 2.82], location: "Girona · Garrotxa", description: "Foc de vegetació amb intensa propagació cap al nord de la comarca.", typeMeta: incidentTypeCatalog.forestFire },
-          { type: "Inundació urbana", shortLocation: "Tarragona", coordinates: [41.12, 1.24], location: "Tarragona · Tarragonès", description: "Acumulació d’aigua i talls de circulació a diversos carrers baixos.", typeMeta: incidentTypeCatalog.flood },
-          { type: "Plujes molt intenses", shortLocation: "Vic", coordinates: [41.93, 2.25], location: "Vic · Osona", description: "Precipitacions intenses amb risc de desbordament local i creixent del cabal.", typeMeta: incidentTypeCatalog.rain },
-          { type: "Accident de trànsit greu", shortLocation: "Figueres", coordinates: [42.27, 2.95], location: "Figueres · AP-7", description: "Col·lisió múltiple amb retencions i talls de circulació en sentit sud.", typeMeta: incidentTypeCatalog.traffic },
-          { type: "Accident químic", shortLocation: "Manresa", coordinates: [41.73, 1.83], location: "Manresa · Bages", description: "Fuita de material perillós en una zona industrial i risc de confinament provisional.", typeMeta: incidentTypeCatalog.chemical },
-          { type: "Emergència sanitària col·lectiva", shortLocation: "Badalona", coordinates: [41.45, 2.24], location: "Badalona · Barcelonès", description: "Múltiples afectats en un espai públic amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical }
+          { type: "Incendi forestal", description: "Foc de vegetació amb propagació afavorida per les condicions locals.", typeMeta: incidentTypeCatalog.forestFire },
+          { type: "Inundació urbana", description: "Acumulació d’aigua en punts baixos amb possible afectació a la mobilitat.", typeMeta: incidentTypeCatalog.flood },
+          { type: "Pluges molt intenses", description: "Precipitacions intenses amb risc de desbordament local i afectació de la mobilitat.", typeMeta: incidentTypeCatalog.rain },
+          { type: "Accident de trànsit greu", description: "Col·lisió amb afectació a la circulació i necessitat d’atenció als implicats.", typeMeta: incidentTypeCatalog.traffic },
+          { type: "Accident químic", description: "Possible fuita de material perillós amb risc de confinament preventiu.", typeMeta: incidentTypeCatalog.chemical },
+          { type: "Emergència sanitària col·lectiva", description: "Diverses persones afectades amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical }
         ];
-        const templateIndex = Math.abs(Math.floor(simulation.gameTime / 1000 / 60 / 20)) % templates.length;
-        const template = templates[templateIndex];
+        const template = templates[Math.floor(Math.random() * templates.length)];
+        const isPopulationSensitive = template.typeMeta.id === "forestFire" || template.typeMeta.id === "chemical";
+        const availableMunicipalities = scenarioMunicipalityLocations.length
+          ? scenarioMunicipalityLocations
+          : incidents.map(incident => {
+            const locationParts = incident.location.split(" · ");
+            return {
+              feature: {
+                properties: {
+                  nom_municipi: incident.shortLocation.split(" · ")[0],
+                  nom_comarca: locationParts[locationParts.length - 1]
+                }
+              },
+              coordinates: {
+                lat: incident.coordinates[0],
+                lng: incident.coordinates[1]
+              }
+            };
+          });
+        const municipalities = availableMunicipalities.map(municipality => ({
+          ...municipality,
+          weight: isPopulationSensitive
+            ? municipalityPopulationWeights.get(normalizeAdministrativeName(municipality.feature.properties.nom_municipi)) || 1
+            : 1
+        }));
+        if (municipalities.length === 0) {
+          throw new Error("No hi ha municipis amb coordenades vàlides per generar una incidència.");
+        }
+        const totalWeight = municipalities.reduce((total, municipality) => total + municipality.weight, 0);
+        let selection = Math.random() * totalWeight;
+        let selectedMunicipality = municipalities[municipalities.length - 1];
+        for (const municipality of municipalities) {
+          selection -= municipality.weight;
+          if (selection < 0) {
+            selectedMunicipality = municipality;
+            break;
+          }
+        }
+        const municipalityName = selectedMunicipality.feature.properties.nom_municipi;
+        const countyName = selectedMunicipality.feature.properties.nom_comarca;
         const baseRisk = template.typeMeta.defaultRisk || 52;
         return createIncident({
           id: `INC-${Date.now().toString().slice(-6)}`,
           type: template.type,
-          shortLocation: template.shortLocation,
-          location: template.location,
-          coordinates: template.coordinates,
-          description: template.description,
+          shortLocation: municipalityName,
+          location: `${municipalityName} · ${countyName}`,
+          coordinates: [
+            selectedMunicipality.coordinates.lat,
+            selectedMunicipality.coordinates.lng
+          ],
+          description: `${template.description} Municipi afectat: ${municipalityName}.`,
           severity: getSeverityFromRisk(baseRisk).severity,
           level: getSeverityFromRisk(baseRisk).level,
           state: "Detectat",
@@ -1370,9 +1497,10 @@
         simulation.paused = false;
         simulation.lastFrame = performance.now();
         const toggleButton = document.getElementById("toggle-sim");
-        if (toggleButton) toggleButton.textContent = "Aturar";
-        const pauseButton = document.getElementById("pause-sim");
-        if (pauseButton) pauseButton.textContent = "Pausa";
+        if (toggleButton) {
+          toggleButton.textContent = "Pausar";
+          toggleButton.classList.add("pause");
+        }
         recordSimulationEvent("Simulació iniciada", "El torn de coordinació entra en funcionament i el temps del joc avança.", null);
         stepSimulation();
       }
@@ -1381,8 +1509,11 @@
         if (!simulation.running) return;
         simulation.running = false;
         simulation.paused = true;
-        const pauseButton = document.getElementById("pause-sim");
-        if (pauseButton) pauseButton.textContent = "Reprendre";
+        const toggleButton = document.getElementById("toggle-sim");
+        if (toggleButton) {
+          toggleButton.textContent = "Reprendre";
+          toggleButton.classList.remove("pause");
+        }
         if (simulation.animationFrame) cancelAnimationFrame(simulation.animationFrame);
         recordSimulationEvent("Pausa de simulació", "El torn queda en pausa i el temps del joc es bloqueja.", null);
       }
@@ -1392,8 +1523,11 @@
         simulation.running = true;
         simulation.paused = false;
         simulation.lastFrame = performance.now();
-        const pauseButton = document.getElementById("pause-sim");
-        if (pauseButton) pauseButton.textContent = "Pausa";
+        const toggleButton = document.getElementById("toggle-sim");
+        if (toggleButton) {
+          toggleButton.textContent = "Pausar";
+          toggleButton.classList.add("pause");
+        }
         recordSimulationEvent("Simulació reanudada", "La coordinació torna a avançar al temps del joc.", null);
         stepSimulation();
       }
@@ -1405,9 +1539,10 @@
         simulation.started = false;
         simulation.paused = false;
         const toggleButton = document.getElementById("toggle-sim");
-        if (toggleButton) toggleButton.textContent = "Iniciar";
-        const pauseButton = document.getElementById("pause-sim");
-        if (pauseButton) pauseButton.textContent = "Pausa";
+        if (toggleButton) {
+          toggleButton.textContent = "Iniciar";
+          toggleButton.classList.remove("pause");
+        }
         recordSimulationEvent("Simulació aturada", "El torn queda tancat i la simulació deixa d’actualitzar-se.", null);
       }
 

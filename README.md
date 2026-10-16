@@ -56,6 +56,8 @@ Les incidències es defineixen com a objectes literals en JavaScript, amb camps 
 
 Aquestes dades es carreguen a la memòria en iniciar l’aplicació i es renderitzen tant en el llistat com en el mapa. L’estat de la UI es gestiona a partir de variables globals com `selectedId`, `activeLayerName` i `markers`.
 
+La simulació genera incidències als municipis disponibles: inundacions, tempestes, accidents de trànsit i emergències sanitàries tenen el mateix pes per municipi. Els incendis i accidents químics ponderen la selecció amb factors relatius de població aproximats per als principals nuclis urbans; la resta de municipis continuen sent candidats amb un pes base.
+
 ## Càrrega de límits administratius
 
 Un dels punts més importants del projecte és la càrrega de dades geogràfiques reals. `loadBoundaryLayers()` fa dos `fetch` simultanis a una base remota de geometries on hi ha:
