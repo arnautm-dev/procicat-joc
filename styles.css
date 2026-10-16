@@ -312,24 +312,6 @@
         scrollbar-width: thin;
       }
 
-      .event-feed {
-        display: flex;
-        flex: 0 0 220px;
-        flex-direction: column;
-        min-height: 0;
-        border-top: 1px solid var(--color-border);
-        background: rgba(18, 29, 38, 0.7);
-      }
-
-      .event-list {
-        display: grid;
-        gap: 8px;
-        min-height: 0;
-        max-height: 180px;
-        padding: 0 12px 14px;
-        overflow-y: auto;
-      }
-
       .list-caption {
         padding: 13px 16px 8px;
         color: var(--color-text-subtle);

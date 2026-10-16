@@ -867,46 +867,6 @@
           letter-spacing: .04em;
           text-transform: uppercase;
         }
-        .event-feed {
-          border-top: 1px solid var(--color-border);
-          background: rgba(18, 29, 38, 0.7);
-        }
-        .event-feed .list-caption {
-          padding-top: 10px;
-        }
-        .event-list {
-          display: grid;
-          gap: 8px;
-          padding: 0 12px 14px;
-        }
-        .event-item {
-          padding: 9px 10px;
-          border: 1px solid rgba(86, 181, 168, 0.18);
-          border-radius: 7px;
-          background: rgba(27, 42, 49, 0.76);
-        }
-        .event-item strong {
-          display: block;
-          margin-bottom: 4px;
-          color: #dfeaf0;
-          font-size: 10px;
-          letter-spacing: .06em;
-          text-transform: uppercase;
-        }
-        .event-item span {
-          display: block;
-          color: var(--color-text-muted);
-          font-size: 10px;
-          line-height: 1.45;
-        }
-        .event-item small {
-          display: block;
-          margin-top: 4px;
-          color: var(--color-text-subtle);
-          font-size: 9px;
-          letter-spacing: .04em;
-          text-transform: uppercase;
-        }
       `;
       document.head.appendChild(simulationStyles);
 
@@ -952,19 +912,6 @@
         });
       }
 
-      function ensureEventFeed() {
-        const panel = document.querySelector(".incident-panel");
-        if (!panel || panel.querySelector(".event-feed")) return;
-        const feed = document.createElement("div");
-        feed.className = "event-feed";
-        feed.innerHTML = `
-          <div class="list-caption">Registre operatiu</div>
-          <div class="event-list" id="event-list"></div>
-        `;
-        const incidentList = panel.querySelector(".incident-list");
-        incidentList.after(feed);
-      }
-
       const simulation = {
         started: false,
         running: false,
@@ -974,8 +921,7 @@
         lastFrame: 0,
         animationFrame: 0,
         gameTime: Date.now(),
-        lastGeneratedIncidentAt: Date.now(),
-        events: []
+        lastGeneratedIncidentAt: Date.now()
       };
 
       function formatSimulationClock(timestamp = simulation.gameTime) {
@@ -996,47 +942,9 @@
         }
       }
 
-      function recordSimulationEvent(title, description, incidentId = null) {
-        const event = {
-          id: `EV-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
-          title,
-          description,
-          incidentId,
-          timestamp: simulation.gameTime
-        };
-        const last = simulation.events[0];
-        if (last && last.title === title && last.description === description) {
-          return;
-        }
-        simulation.events.unshift(event);
-        simulation.events = simulation.events.slice(0, 12);
-        renderSimulationEvents();
-        const status = document.getElementById("map-data-status");
-        if (status) {
-          status.textContent = description;
-          status.hidden = false;
-          status.classList.remove("error");
-        }
-      }
-
-      function renderSimulationEvents() {
-        const feed = document.getElementById("event-list");
-        if (!feed) return;
-        feed.innerHTML = simulation.events.slice(0, 6).map(event => `
-          <div class="event-item">
-            <strong>${event.title}</strong>
-            <span>${event.description}</span>
-            <small>${formatSimulationClock(event.timestamp)}</small>
-          </div>
-        `).join("");
-      }
-
       function setSimulationSpeed(value) {
         const normalized = Number(value) || 1;
         simulation.speed = normalized;
-        if (simulation.started) {
-          recordSimulationEvent("Velocitat de simulació", `Temps del joc accelerat a ${normalized}x.`, null);
-        }
       }
 
       function resolveIncidentType(type) {
@@ -1261,8 +1169,6 @@
         incident.update = `Canvi d’estat: ${normalized}.`;
         incident.history = incident.history || [];
         incident.history.unshift({ time: formatSimulationClock(), text: `Estat actualitzat a ${normalized}.` });
-        recordSimulationEvent("Canvi d’estat", `${incident.type} passa a ${normalized}.`, incident.id);
-
         if (isIncidentResolved(incident)) {
           const marker = markers.get(incident.id);
           if (marker) {
@@ -1292,7 +1198,6 @@
         incident.update = `Recursos assignats: ${resourceName}.`;
         incident.history = incident.history || [];
         incident.history.unshift({ time: formatSimulationClock(), text: `Assignat ${resourceName} al lloc.` });
-        recordSimulationEvent("Recursos assignats", `${incident.type} rep suport operatiu al lloc.`, incident.id);
         refreshIncidentList();
         if (selectedId === id) renderDetail(incident);
         return incident;
@@ -1305,7 +1210,6 @@
         incident.update = note;
         incident.history = incident.history || [];
         incident.history.unshift({ time: formatSimulationClock(), text: note });
-        recordSimulationEvent("Observació registrada", `${incident.type} actualitzat amb una nova nota operativa.`, incident.id);
         refreshIncidentList();
         if (selectedId === id) renderDetail(incident);
         return incident;
@@ -1333,7 +1237,6 @@
         const id = incident.id || `INC-${Date.now().toString().slice(-6)}`;
         incident.id = id;
         incidents.unshift(incident);
-        recordSimulationEvent("Nou incident detectat", `${incident.type} a ${incident.shortLocation}.`, incident.id);
         refreshIncidentList();
         const marker = L.marker(incident.coordinates, { icon: markerIcon(incident, false) }).addTo(map);
         marker.bindTooltip(`${incident.type} · ${incident.shortLocation}`, { direction: "top", offset: [0, -22] });
@@ -1439,14 +1342,12 @@
             incident.update = `Gravetat actualitzada a ${nextSeverity.severity.toLowerCase()} segons l’evolució del focus.`;
             incident.history = incident.history || [];
             incident.history.unshift({ time: formatSimulationClock(), text: `Gravetat actualitzada: ${nextSeverity.severity}.` });
-            recordSimulationEvent("Canvi de gravetat", `${incident.type} passa a ${nextSeverity.severity.toLowerCase()}.`, incident.id);
           }
 
           if (incident.risk > 76 && !/En intervenció|Controlat|Resolut|Tancat/.test(incident.state)) {
             incident.state = "En intervenció";
             incident.update = "L’incident requereix intervenció activa i coordinació dels recursos disponibles.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Estat actualitzat a En intervenció." });
-            recordSimulationEvent("Intervenció activa", `${incident.type} entra en intervenció directa.`, incident.id);
           }
 
           const elapsedAssignedTime = incident.assignedAt ? (simulation.gameTime - incident.assignedAt) : 0;
@@ -1454,14 +1355,12 @@
             incident.state = "Controlat";
             incident.update = "L’incident està controlat i se’n monitoritza la resolució.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Incidència controlada per l’equip assignat." });
-            recordSimulationEvent("Incident controlat", `${incident.type} queda sota control operatiu.`, incident.id);
           }
 
           if (incident.resourcesAssigned > 0 && elapsedAssignedTime > 90 * 60 * 1000 && !/Resolut|Tancat/.test(incident.state)) {
             incident.state = "Resolut";
             incident.update = "L’incident s’ha resolt i queda disponible a l’historial operatiu.";
             incident.history.unshift({ time: formatSimulationClock(), text: "Incidència resolta i tancada en l’historial." });
-            recordSimulationEvent("Incident resolt", `${incident.type} ja no està actiu.`, incident.id);
           }
 
           incident.time = formatSimulationClock();
@@ -1501,7 +1400,6 @@
           toggleButton.textContent = "Pausar";
           toggleButton.classList.add("pause");
         }
-        recordSimulationEvent("Simulació iniciada", "El torn de coordinació entra en funcionament i el temps del joc avança.", null);
         stepSimulation();
       }
 
@@ -1515,7 +1413,6 @@
           toggleButton.classList.remove("pause");
         }
         if (simulation.animationFrame) cancelAnimationFrame(simulation.animationFrame);
-        recordSimulationEvent("Pausa de simulació", "El torn queda en pausa i el temps del joc es bloqueja.", null);
       }
 
       function resumeSimulation() {
@@ -1528,7 +1425,6 @@
           toggleButton.textContent = "Pausar";
           toggleButton.classList.add("pause");
         }
-        recordSimulationEvent("Simulació reanudada", "La coordinació torna a avançar al temps del joc.", null);
         stepSimulation();
       }
 
@@ -1543,7 +1439,6 @@
           toggleButton.textContent = "Iniciar";
           toggleButton.classList.remove("pause");
         }
-        recordSimulationEvent("Simulació aturada", "El torn queda tancat i la simulació deixa d’actualitzar-se.", null);
       }
 
       function bindGlobalSimulationAPI() {
@@ -1565,8 +1460,6 @@
 
       function initializeSimulation() {
         setupSimulationUI();
-        ensureEventFeed();
-        renderSimulationEvents();
         updateSimulationClock();
         incidents.forEach(incident => {
           hydrateIncident(incident);
@@ -1579,7 +1472,6 @@
         });
         bindGlobalSimulationAPI();
         document.getElementById("sim-speed").value = String(simulation.speed);
-        recordSimulationEvent("Escenari actiu", "Sistema operatiu carregat i llistat d’incidències disponible.", null);
       }
 
       initializeSimulation();
