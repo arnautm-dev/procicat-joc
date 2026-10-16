@@ -1,95 +1,4 @@
-      const incidents = [
-        {
-          id: "INC-2641",
-          type: "Incendi forestal",
-          location: "Sant Feliu de Guíxols · Baix Empordà",
-          shortLocation: "Sant Feliu de Guíxols",
-          severity: "Crítica",
-          level: "critical",
-          state: "Actuació en curs",
-          time: "17:31",
-          coordinates: [41.79, 3.02],
-          description: "Foc de vegetació amb diversos focus actius a l’entorn de les Gavarres. El vent de garbí afavoreix la propagació cap a la zona nord.",
-          update: "Bombers informen de dos flancs actius. Es treballa per protegir les masies disperses.",
-          services: [["Bombers", "6 dotacions"], ["Mossos d’Esquadra", "2 patrulles"], ["SEM", "1 unitat"]],
-          calls: "12 comunicacions"
-        },
-        {
-          id: "INC-2638",
-          type: "Inundació urbana",
-          location: "Tarragona · Tarragonès",
-          shortLocation: "Tarragona",
-          severity: "Important",
-          level: "high",
-          state: "Seguiment",
-          time: "17:24",
-          coordinates: [41.1189, 1.2445],
-          description: "Acumulació d’aigua en diversos punts baixos de la ciutat després de la tempesta. Afectació a la mobilitat en carrers propers al centre.",
-          update: "Policia Local ha senyalitzat dos passos inundats. Pluja moderada encara activa.",
-          services: [["Policia Local", "3 patrulles"], ["Bombers", "2 dotacions"], ["SEM", "Disponible"]],
-          calls: "8 comunicacions"
-        },
-        {
-          id: "INC-2634",
-          type: "Accident de trànsit",
-          location: "AP-7, tram de Figueres · Alt Empordà",
-          shortLocation: "Figueres · AP-7",
-          severity: "Important",
-          level: "high",
-          state: "Actuació en curs",
-          time: "17:18",
-          coordinates: [42.265, 2.961],
-          description: "Col·lisió amb diversos vehicles al carril en sentit sud. Retencions al tram i circulació desviada per un sol carril.",
-          update: "Equips d’emergència al lloc. S’està valorant l’estat de les persones implicades.",
-          services: [["Mossos d’Esquadra", "2 patrulles"], ["SEM", "2 unitats"], ["Bombers", "1 dotació"]],
-          calls: "6 comunicacions"
-        },
-        {
-          id: "INC-2629",
-          type: "Incendi de vegetació",
-          location: "Manresa · Bages",
-          shortLocation: "Manresa",
-          severity: "Important",
-          level: "high",
-          state: "En seguiment",
-          time: "17:06",
-          coordinates: [41.728, 1.826],
-          description: "Foc de marge amb continuïtat de vegetació a prop d’una zona industrial. Fum visible des de diversos barris.",
-          update: "Perímetre contingut; els equips continuen remullant la zona afectada.",
-          services: [["Bombers", "4 dotacions"], ["Policia Local", "1 patrulla"]],
-          calls: "5 comunicacions"
-        },
-        {
-          id: "INC-2623",
-          type: "Avís de riuada",
-          location: "Vic · Osona",
-          shortLocation: "Vic",
-          severity: "Seguiment",
-          level: "warning",
-          state: "En seguiment",
-          time: "16:52",
-          coordinates: [41.930, 2.254],
-          description: "El cabal del riu Mèder augmenta després de les precipitacions. Sense afectacions reportades en aquest moment.",
-          update: "El sensor de llera registra una tendència a l’alça. Ajuntament informat.",
-          services: [["Protecció Civil", "Seguiment"], ["Policia Local", "Disponible"]],
-          calls: "4 comunicacions"
-        },
-        {
-          id: "INC-2618",
-          type: "Esllavissada",
-          location: "N-260, la Seu d’Urgell · Alt Urgell",
-          shortLocation: "La Seu d’Urgell · N-260",
-          severity: "Seguiment",
-          level: "warning",
-          state: "Via afectada",
-          time: "16:39",
-          coordinates: [42.358, 1.458],
-          description: "Despreniment de roques sobre un carril de la carretera. Pas alternatiu habilitat mentre s’inspecciona el talús.",
-          update: "Manteniment de carreteres i Mossos al lloc. Sense persones ferides.",
-          services: [["Mossos d’Esquadra", "1 patrulla"], ["Carreteres", "1 equip"]],
-          calls: "3 comunicacions"
-        }
-      ];
+      const incidents = [];
 
       const incidentTypeCatalog = {
         forestFire: {
@@ -803,16 +712,6 @@
         window.setTimeout(() => map.invalidateSize({ pan: false }), 240);
       }
 
-      renderIncidentList();
-      incidents.forEach(incident => {
-        const marker = L.marker(incident.coordinates, { icon: markerIcon(incident, false) }).addTo(map);
-        marker.bindTooltip(`${incident.type} · ${incident.shortLocation}`, { direction: "top", offset: [0, -22] });
-        marker.on("click", () => {
-          selectIncident(incident.id, false);
-          document.querySelector(`[data-id="${incident.id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        });
-        markers.set(incident.id, marker);
-      });
       document.getElementById("close-detail").addEventListener("click", closeDetail);
       window.addEventListener("resize", () => map.invalidateSize({ pan: false }));
       const layersToggle = document.getElementById("layers-toggle");
@@ -1307,6 +1206,14 @@
         return incident;
       }
 
+      const fallbackScenarioMunicipalities = [
+        { feature: { properties: { nom_municipi: "Barcelona", nom_comarca: "Barcelonès" } }, coordinates: { lat: 41.3874, lng: 2.1686 } },
+        { feature: { properties: { nom_municipi: "Girona", nom_comarca: "Gironès" } }, coordinates: { lat: 41.9794, lng: 2.8214 } },
+        { feature: { properties: { nom_municipi: "Lleida", nom_comarca: "Segrià" } }, coordinates: { lat: 41.6176, lng: 0.6200 } },
+        { feature: { properties: { nom_municipi: "Tarragona", nom_comarca: "Tarragonès" } }, coordinates: { lat: 41.1189, lng: 1.2445 } },
+        { feature: { properties: { nom_municipi: "Vic", nom_comarca: "Osona" } }, coordinates: { lat: 41.9300, lng: 2.2540 } }
+      ];
+
       function generateScenarioIncident() {
         const templates = [
           { type: "Incendi forestal", description: "Foc de vegetació amb propagació afavorida per les condicions locals.", typeMeta: incidentTypeCatalog.forestFire },
@@ -1320,21 +1227,7 @@
         const isPopulationSensitive = template.typeMeta.id === "forestFire" || template.typeMeta.id === "chemical";
         const availableMunicipalities = scenarioMunicipalityLocations.length
           ? scenarioMunicipalityLocations
-          : incidents.map(incident => {
-            const locationParts = incident.location.split(" · ");
-            return {
-              feature: {
-                properties: {
-                  nom_municipi: incident.shortLocation.split(" · ")[0],
-                  nom_comarca: locationParts[locationParts.length - 1]
-                }
-              },
-              coordinates: {
-                lat: incident.coordinates[0],
-                lng: incident.coordinates[1]
-              }
-            };
-          });
+          : fallbackScenarioMunicipalities;
         const municipalities = availableMunicipalities.map(municipality => ({
           ...municipality,
           weight: isPopulationSensitive
@@ -1473,6 +1366,7 @@
           toggleButton.textContent = "Pausar";
           toggleButton.classList.add("pause");
         }
+        refreshIncidentList();
         stepSimulation();
       }
 
@@ -1569,6 +1463,15 @@
         }
 
         list.innerHTML = "";
+        if (visibleIncidents.length === 0) {
+          const emptyState = document.createElement("div");
+          emptyState.className = "list-caption";
+          emptyState.textContent = simulation.started
+            ? "Esperant noves emergències..."
+            : "Inicia el torn per rebre emergències";
+          list.append(emptyState);
+          return;
+        }
         for (const incident of visibleIncidents) {
           hydrateIncident(incident);
           const button = document.createElement("button");
