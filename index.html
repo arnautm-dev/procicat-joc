@@ -71,11 +71,14 @@
               <span>Cerca per tipus o municipi</span>
             </div>
             <div class="filter-row">
-              <span>Ordenat per gravetat</span>
-              <span class="filter-chip">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-                Filtrar
-              </span>
+              <label for="incident-sort">Ordena per</label>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path></svg>
+              <select id="incident-sort" aria-label="Ordena les emergències">
+                <option value="severity">Més greu a menys greu</option>
+                <option value="type">Per tipus</option>
+                <option value="newest">Més nou a més antic</option>
+                <option value="oldest">Més antic a més nou</option>
+              </select>
             </div>
           </div>
 

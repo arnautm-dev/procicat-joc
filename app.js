@@ -931,6 +931,15 @@
         return `${capitalizeWord(weekday)}, ${hour}`;
       }
 
+      function getIncidentStartTimestamp(time) {
+        const match = /^(\d{1,2}):(\d{2})$/.exec(String(time || ""));
+        if (!match) return simulation.gameTime;
+        const date = new Date(simulation.gameTime);
+        date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+        const timestamp = date.getTime();
+        return timestamp > simulation.gameTime ? timestamp - 24 * 60 * 60 * 1000 : timestamp;
+      }
+
       function capitalizeWord(value) {
         return value.charAt(0).toUpperCase() + value.slice(1);
       }
@@ -1233,6 +1242,9 @@
       function createIncident(details = {}) {
         const incident = { ...details };
         ensureIncidentGeneratesOwnDetails(incident);
+        incident.createdAt = Number.isFinite(incident.createdAt)
+          ? incident.createdAt
+          : getIncidentStartTimestamp(incident.time);
         hydrateIncident(incident);
         const id = incident.id || `INC-${Date.now().toString().slice(-6)}`;
         incident.id = id;
@@ -1363,7 +1375,6 @@
             incident.history.unshift({ time: formatSimulationClock(), text: "Incidència resolta i tancada en l’historial." });
           }
 
-          incident.time = formatSimulationClock();
           if (selectedId === incident.id) renderDetail(incident);
         }
         refreshIncidentList();
@@ -1464,6 +1475,9 @@
         incidents.forEach(incident => {
           hydrateIncident(incident);
           ensureIncidentGeneratesOwnDetails(incident);
+          incident.createdAt = Number.isFinite(incident.createdAt)
+            ? incident.createdAt
+            : getIncidentStartTimestamp(incident.time);
           incident.time = incident.time || formatSimulationClock();
           if (!incident.history || incident.history.length === 0) {
             incident.history = [{ time: formatSimulationClock(), text: "Incidència registrada a la sala de coordinació." }];
@@ -1478,8 +1492,12 @@
 
       renderIncidentList = function() {
         if (!list) return;
+        const severityOrder = { critical: 4, high: 3, warning: 2, moderate: 1, low: 0 };
+        const sortMode = document.getElementById("incident-sort").value;
         const visibleIncidents = getActiveIncidents().sort((a, b) => {
-          const severityOrder = { critical: 4, high: 3, warning: 2, moderate: 1, low: 0 };
+          if (sortMode === "type") return a.type.localeCompare(b.type, "ca");
+          if (sortMode === "newest") return b.createdAt - a.createdAt;
+          if (sortMode === "oldest") return a.createdAt - b.createdAt;
           return (severityOrder[b.level || "high"] || 0) - (severityOrder[a.level || "high"] || 0);
         });
         const countBadge = document.querySelector(".count-badge");
@@ -1516,5 +1534,6 @@
 
       refreshIncidentList = renderIncidentList;
 
+      document.getElementById("incident-sort").addEventListener("change", renderIncidentList);
       renderIncidentList();
       if (selectedId) setTimeout(() => selectIncident(selectedId, false), 80);
