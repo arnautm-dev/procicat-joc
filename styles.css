@@ -570,6 +570,12 @@
         background: radial-gradient(circle, #8ce778 0 25%, #ffd54d 40%, #ef4545 70%, transparent);
       }
 
+      .leaflet-radar-pane {
+        filter: blur(14px);
+        opacity: 0.82;
+        pointer-events: none;
+      }
+
       .weather-controls {
         position: absolute;
         z-index: 500;

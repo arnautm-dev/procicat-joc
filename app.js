@@ -215,6 +215,9 @@
       const radarState = { forecastHours: 0, lastRenderTime: null, lastSimulationRenderTime: null, playbackTimer: null };
 
       function createRadarLayer() {
+        map.createPane("radarPane");
+        map.getPane("radarPane").classList.add("leaflet-radar-pane");
+        map.getPane("radarPane").style.zIndex = "425";
         return L.layerGroup();
       }
 
@@ -342,6 +345,7 @@
             stroke: false,
             fillColor: color,
             fillOpacity: Math.min(0.64, 0.18 + intensity / 85),
+            pane: "radarPane",
             interactive: false
           }).addTo(radarLayer);
         }
