@@ -570,6 +570,80 @@
         background: radial-gradient(circle, #8ce778 0 25%, #ffd54d 40%, #ef4545 70%, transparent);
       }
 
+      .weather-controls {
+        position: absolute;
+        z-index: 500;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px;
+        border: 1px solid rgb(42 59 67 / 22%);
+        border-radius: 8px;
+        background: rgb(20 31 39 / 94%);
+        box-shadow: var(--shadow-panel);
+        backdrop-filter: blur(8px);
+      }
+
+      .weather-controls[hidden] {
+        display: none;
+      }
+
+      .weather-forecast-times {
+        display: flex;
+        gap: 3px;
+      }
+
+      .weather-time-option,
+      .weather-playback {
+        display: grid;
+        min-width: 46px;
+        min-height: 34px;
+        place-items: center;
+        padding: 4px 6px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: transparent;
+        color: #c1cdd1;
+        font: inherit;
+        font-size: 10px;
+        cursor: pointer;
+      }
+
+      .weather-time-option small {
+        color: var(--color-text-subtle);
+        font-size: 8px;
+      }
+
+      .weather-time-option:hover,
+      .weather-playback:hover {
+        background: #253640;
+        color: #f0f5f5;
+      }
+
+      .weather-time-option.selected {
+        border-color: rgb(86 181 168 / 30%);
+        background: #254342;
+        color: #a3e0d2;
+      }
+
+      .weather-time-option.selected small {
+        color: #a3e0d2;
+      }
+
+      .weather-playback {
+        min-width: 76px;
+        border-color: var(--color-border);
+        background: var(--color-surface-raised);
+      }
+
+      .weather-time-option:focus-visible,
+      .weather-playback:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+      }
+
       .map-legend {
         position: absolute;
         z-index: 500;
@@ -1128,6 +1202,23 @@
 
         .map-legend-items {
           gap: 7px;
+        }
+
+        .weather-controls {
+          top: 9px;
+          left: 9px;
+          gap: 4px;
+          padding: 4px;
+        }
+
+        .weather-time-option {
+          min-width: 40px;
+          padding: 3px;
+        }
+
+        .weather-playback {
+          min-width: 66px;
+          padding: 3px 5px;
         }
 
         .map-legend-item {

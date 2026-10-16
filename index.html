@@ -107,6 +107,23 @@
               </button>
             </div>
           </div>
+          <div class="weather-controls" id="weather-controls" aria-label="Controls del radar" hidden>
+            <div class="weather-forecast-times" role="group" aria-label="Moment de la previsió">
+              <button class="weather-time-option selected" type="button" data-weather-offset="0" aria-pressed="true">
+                <span>Ara</span><small>--:--</small>
+              </button>
+              <button class="weather-time-option" type="button" data-weather-offset="1" aria-pressed="false">
+                <span>+1 h</span><small>--:--</small>
+              </button>
+              <button class="weather-time-option" type="button" data-weather-offset="2" aria-pressed="false">
+                <span>+2 h</span><small>--:--</small>
+              </button>
+              <button class="weather-time-option" type="button" data-weather-offset="3" aria-pressed="false">
+                <span>+3 h</span><small>--:--</small>
+              </button>
+            </div>
+            <button class="weather-playback" id="weather-playback" type="button" aria-pressed="false">Reproduir</button>
+          </div>
           <div class="map-legend" id="map-legend" aria-label="Llegenda del mapa">
             <div class="map-legend-content">
               <span class="map-legend-title">Llegenda del mapa</span>

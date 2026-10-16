@@ -204,87 +204,199 @@
         "La Seu d'Urgell": 1
       }).map(([name, weight]) => [normalizeAdministrativeName(name), weight]));
 
+      const weatherModel = {
+        seed: null,
+        storms: [],
+        startedAt: null,
+        lastIncidentCheck: null,
+        createdEpisodes: new Set(),
+        random: null
+      };
+      const radarState = { forecastHours: 0, lastRenderTime: null, lastSimulationRenderTime: null, playbackTimer: null };
+
       function createRadarLayer() {
-        const randomBetween = (minimum, maximum) => minimum + Math.random() * (maximum - minimum);
-        const randomInteger = (minimum, maximum) => Math.floor(randomBetween(minimum, maximum + 1));
-        const seed = randomInteger(1, 999999);
-        const stormCells = Array.from({ length: randomInteger(2, 4) }, () => {
-          const x = randomInteger(180, 820);
-          const y = randomInteger(150, 620);
-          const radiusX = randomInteger(75, 150);
-          const radiusY = randomInteger(55, 115);
-          const driftX = randomInteger(15, 55);
-          const driftY = randomInteger(-25, 25);
-          const duration = randomInteger(18, 38);
-          const delay = randomInteger(-duration, 0);
-          const rotation = randomInteger(-35, 35);
-          const gradient = Math.random() > 0.55 ? "storm" : "rain";
-          return `
-            <g>
-              <ellipse cx="${x}" cy="${y}" rx="${radiusX}" ry="${radiusY}" fill="url(#${gradient})" transform="rotate(${rotation} ${x} ${y})" opacity=".82">
-                <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" begin="${delay}s" repeatCount="indefinite"/>
-                <animate attributeName="opacity" values=".62;.9;.62" dur="${randomInteger(8, 16)}s" begin="${delay}s" repeatCount="indefinite"/>
-              </ellipse>
-              <ellipse cx="${x}" cy="${y}" rx="${Math.round(radiusX * 1.55)}" ry="${Math.round(radiusY * 1.45)}" fill="url(#rain)" opacity=".56">
-                <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" begin="${delay}s" repeatCount="indefinite"/>
-              </ellipse>
-            </g>`;
-        }).join("");
-        const rainBands = Array.from({ length: randomInteger(2, 4) }, () => {
-          const startX = randomInteger(80, 450);
-          const startY = randomInteger(180, 620);
-          const width = randomInteger(180, 370);
-          const driftX = randomInteger(30, 100);
-          const driftY = randomInteger(-20, 25);
-          const duration = randomInteger(24, 48);
-          return `
-            <path d="M${startX} ${startY}c${Math.round(width * 0.3)} -${randomInteger(25, 100)} ${Math.round(width * 0.55)} ${randomInteger(-45, 55)} ${width} ${randomInteger(-15, 45)}" fill="none" stroke="${Math.random() > 0.5 ? "#68e47a" : "#35cbd2"}" stroke-width="${randomInteger(12, 26)}" stroke-linecap="round" opacity=".58">
-              <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" repeatCount="indefinite"/>
-            </path>`;
-        }).join("");
-        const radarSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760">
-            <defs>
-              <radialGradient id="rain">
-                <stop offset="0" stop-color="#f4ed55" stop-opacity=".95"/>
-                <stop offset=".28" stop-color="#68e47a" stop-opacity=".88"/>
-                <stop offset=".58" stop-color="#35cbd2" stop-opacity=".78"/>
-                <stop offset=".82" stop-color="#4778e8" stop-opacity=".54"/>
-                <stop offset="1" stop-color="#4778e8" stop-opacity="0"/>
-              </radialGradient>
-              <radialGradient id="storm">
-                <stop offset="0" stop-color="#f4e64b" stop-opacity=".95"/>
-                <stop offset=".24" stop-color="#f2973e" stop-opacity=".9"/>
-                <stop offset=".46" stop-color="#e54e54" stop-opacity=".82"/>
-                <stop offset=".75" stop-color="#7d4cbd" stop-opacity=".62"/>
-                <stop offset="1" stop-color="#5146a4" stop-opacity="0"/>
-              </radialGradient>
-              <filter id="soften"><feGaussianBlur stdDeviation="10"/></filter>
-              <filter id="grain">
-                <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="${seed}"/>
-                <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .22 0"/>
-              </filter>
-            </defs>
-            <g filter="url(#soften)">
-              ${stormCells}
-              ${rainBands}
-            </g>
-            <rect width="100%" height="100%" filter="url(#grain)" opacity=".13"/>
-          </svg>`;
-        const image = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(radarSvg)}`;
-        return L.imageOverlay(image, [[40.45, 0.05], [43.12, 3.65]], {
-          opacity: 0.78,
-          interactive: false
-        });
+        return L.layerGroup();
       }
 
       thematicLayers.radar = createRadarLayer();
 
-      function refreshRadarLayer() {
-        if (enabledThematicLayers.has("radar")) thematicLayers.radar.removeFrom(map);
-        thematicLayers.radar = createRadarLayer();
-        if (enabledThematicLayers.has("radar")) thematicLayers.radar.addTo(map);
+      function createSeededRandom(seed) {
+        let state = seed >>> 0;
+        return () => {
+          state += 0x6D2B79F5;
+          let value = state;
+          value = Math.imul(value ^ (value >>> 15), value | 1);
+          value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+          return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+        };
       }
+
+      function initializeWeatherModel() {
+        const randomSeed = new Uint32Array(1);
+        crypto.getRandomValues(randomSeed);
+        weatherModel.seed = randomSeed[0];
+        const random = createSeededRandom(weatherModel.seed);
+        weatherModel.random = random;
+        weatherModel.startedAt = simulation.gameTime;
+        weatherModel.lastIncidentCheck = simulation.gameTime;
+        weatherModel.createdEpisodes = new Set();
+        weatherModel.storms = Array.from({ length: 9 }, (_, index) => ({
+          id: `storm-${index + 1}`,
+          latitude: 40.75 + random() * 2.1,
+          longitude: 0.35 + random() * 3.0,
+          driftLatitude: (random() - 0.5) * 0.28,
+          driftLongitude: (random() - 0.5) * 0.55,
+          radiusKm: 10 + random() * 38,
+          intensity: 5 + random() * 33,
+          startOffset: (random() * 240 - 120) * 60 * 1000,
+          duration: (75 + random() * 170) * 60 * 1000,
+          phase: random() * Math.PI * 2,
+          orientation: (random() - 0.5) * Math.PI,
+          elongation: 1 + random() * 1.3
+        }));
+      }
+
+      function getStormPosition(storm, timestamp) {
+        const elapsedHours = (timestamp - weatherModel.startedAt) / 3600000;
+        return {
+          latitude: storm.latitude + storm.driftLatitude * elapsedHours,
+          longitude: storm.longitude + storm.driftLongitude * elapsedHours
+        };
+      }
+
+      function getPrecipitationAt(latitude, longitude, timestamp) {
+        if (weatherModel.seed === null) return { intensity: 0, stormId: null };
+        let intensity = 0;
+        let dominantStormId = null;
+        let dominantIntensity = 0;
+        for (const storm of weatherModel.storms) {
+          const age = (timestamp - weatherModel.startedAt - storm.startOffset) / storm.duration;
+          if (age <= 0 || age >= 1) continue;
+          const center = getStormPosition(storm, timestamp);
+          const latitudeDelta = (latitude - center.latitude) * 111;
+          const longitudeDelta = (longitude - center.longitude) * 83 * Math.cos(latitude * Math.PI / 180);
+          const along = latitudeDelta * Math.cos(storm.orientation) + longitudeDelta * Math.sin(storm.orientation);
+          const across = -latitudeDelta * Math.sin(storm.orientation) + longitudeDelta * Math.cos(storm.orientation);
+          const distance = Math.sqrt((along / storm.elongation) ** 2 + across ** 2);
+          const spatialWeight = Math.exp(-0.5 * (distance / storm.radiusKm) ** 2);
+          const temporalWeight = Math.sin(Math.PI * age) ** 0.7;
+          const cellIntensity = storm.intensity * spatialWeight * temporalWeight * (0.88 + 0.12 * Math.sin(age * Math.PI * 4 + storm.phase));
+          intensity += cellIntensity;
+          if (cellIntensity > dominantIntensity) {
+            dominantIntensity = cellIntensity;
+            dominantStormId = storm.id;
+          }
+        }
+        return { intensity, stormId: dominantStormId };
+      }
+
+      function getAccumulatedRainfall(latitude, longitude, timestamp, duration = 3 * 3600000) {
+        const sampleInterval = 10 * 60000;
+        const firstSample = Math.max(weatherModel.startedAt, timestamp - duration);
+        let accumulated = 0;
+        const stormAccumulation = new Map();
+        for (let sampleTime = firstSample; sampleTime < timestamp; sampleTime += sampleInterval) {
+          const elapsed = Math.min(sampleInterval, timestamp - sampleTime);
+          const sample = getPrecipitationAt(latitude, longitude, sampleTime + elapsed / 2);
+          const rainfall = sample.intensity * elapsed / 3600000;
+          accumulated += rainfall;
+          if (sample.stormId) stormAccumulation.set(sample.stormId, (stormAccumulation.get(sample.stormId) || 0) + rainfall);
+        }
+        const stormId = [...stormAccumulation].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+        return { amount: accumulated, stormId };
+      }
+
+      function getWeatherAt(latitude, longitude, timestamp = simulation.gameTime) {
+        const precipitation = getPrecipitationAt(latitude, longitude, timestamp);
+        const accumulation = getAccumulatedRainfall(latitude, longitude, timestamp);
+        return {
+          timestamp,
+          intensity: precipitation.intensity,
+          accumulatedRainfall: accumulation.amount,
+          stormId: precipitation.stormId || accumulation.stormId
+        };
+      }
+
+      const radarGrid = Array.from({ length: 11 * 13 }, (_, index) => ({
+        latitude: 40.5 + Math.floor(index / 13) * 0.22,
+        longitude: 0.05 + (index % 13) * 0.29
+      }));
+
+      function renderRadar() {
+        const radarLayer = thematicLayers.radar;
+        radarLayer.clearLayers();
+        if (weatherModel.seed === null) {
+          updateWeatherControls();
+          return;
+        }
+        const targetTime = simulation.gameTime + radarState.forecastHours * 3600000;
+        radarState.lastRenderTime = targetTime;
+        radarState.lastSimulationRenderTime = simulation.gameTime;
+        for (const point of radarGrid) {
+          const { intensity } = getPrecipitationAt(point.latitude, point.longitude, targetTime);
+          if (intensity < 1.3) continue;
+          const color = intensity < 4 ? "#4778e8" : intensity < 10 ? "#35cbd2" : intensity < 20 ? "#68e47a" : intensity < 30 ? "#f0cf4b" : intensity < 40 ? "#f49a4b" : "#e54e54";
+          const radius = 12500 + Math.min(intensity, 40) * 850;
+          L.circle([point.latitude, point.longitude], {
+            radius,
+            stroke: false,
+            fillColor: color,
+            fillOpacity: Math.min(0.64, 0.18 + intensity / 85),
+            interactive: false
+          }).addTo(radarLayer);
+        }
+        updateWeatherControls();
+      }
+
+      function refreshRadarLayer() {
+        renderRadar();
+      }
+
+      function formatClockTime(timestamp) {
+        return new Intl.DateTimeFormat("ca-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(timestamp));
+      }
+
+      function updateWeatherControls() {
+        document.querySelectorAll(".weather-time-option").forEach(button => {
+          const offset = Number(button.dataset.weatherOffset);
+          button.setAttribute("aria-pressed", String(offset === radarState.forecastHours));
+          button.classList.toggle("selected", offset === radarState.forecastHours);
+          button.querySelector("small").textContent = formatClockTime(simulation.gameTime + offset * 3600000);
+        });
+      }
+
+      function setRadarForecast(hours) {
+        radarState.forecastHours = hours;
+        renderRadar();
+      }
+
+      function stopRadarPlayback() {
+        if (radarState.playbackTimer !== null) {
+          window.clearInterval(radarState.playbackTimer);
+          radarState.playbackTimer = null;
+        }
+        const button = document.getElementById("weather-playback");
+        button.textContent = "Reproduir";
+        button.setAttribute("aria-pressed", "false");
+      }
+
+      function toggleRadarPlayback() {
+        if (radarState.playbackTimer !== null) {
+          stopRadarPlayback();
+          return;
+        }
+        const button = document.getElementById("weather-playback");
+        button.textContent = "Pausar";
+        button.setAttribute("aria-pressed", "true");
+        radarState.playbackTimer = window.setInterval(() => {
+          setRadarForecast((radarState.forecastHours + 1) % 4);
+        }, 1400);
+      }
+
+      document.querySelectorAll(".weather-time-option").forEach(button => {
+        button.addEventListener("click", () => setRadarForecast(Number(button.dataset.weatherOffset)));
+      });
+      document.getElementById("weather-playback").addEventListener("click", toggleRadarPlayback);
 
       function uniqueTopologyFeatures(topology, objectName, propertyName) {
         const geometryCollection = topology.objects[objectName];
@@ -560,6 +672,14 @@
           button.classList.toggle("selected", !isEnabled);
           button.setAttribute("aria-pressed", String(!isEnabled));
         }
+        if (layerName === "radar") {
+          const controls = document.getElementById("weather-controls");
+          controls.hidden = isEnabled;
+          if (isEnabled) {
+            stopRadarPlayback();
+            renderRadar();
+          }
+        }
         renderMapLegend();
       }
 
@@ -830,6 +950,7 @@
             <select id="sim-speed" aria-label="Velocitat de simulació">
               <option value="1">1x</option>
               <option value="2">2x</option>
+              <option value="4">4x</option>
               <option value="5">5x</option>
               <option value="10">10x</option>
             </select>
@@ -847,6 +968,7 @@
 
         const toggleButton = document.getElementById("toggle-sim");
         const speedSelect = document.getElementById("sim-speed");
+        speedSelect.addEventListener("change", updateWeatherControls);
         toggleButton.addEventListener("click", () => {
           if (!simulation.started) startSimulation();
           else if (simulation.running) pauseSimulation();
@@ -863,7 +985,7 @@
         running: false,
         paused: false,
         speed: 1,
-        speedRates: { 1: 1, 2: 2, 5: 60, 10: 360 },
+        speedRates: { 1: 1, 2: 2, 4: 4, 5: 60, 10: 360 },
         lastFrame: 0,
         animationFrame: 0,
         gameTime: Date.now(),
@@ -1217,13 +1339,12 @@
       function generateScenarioIncident() {
         const templates = [
           { type: "Incendi forestal", description: "Foc de vegetació amb propagació afavorida per les condicions locals.", typeMeta: incidentTypeCatalog.forestFire },
-          { type: "Inundació urbana", description: "Acumulació d’aigua en punts baixos amb possible afectació a la mobilitat.", typeMeta: incidentTypeCatalog.flood },
-          { type: "Pluges molt intenses", description: "Precipitacions intenses amb risc de desbordament local i afectació de la mobilitat.", typeMeta: incidentTypeCatalog.rain },
           { type: "Accident de trànsit greu", description: "Col·lisió amb afectació a la circulació i necessitat d’atenció als implicats.", typeMeta: incidentTypeCatalog.traffic },
           { type: "Accident químic", description: "Possible fuita de material perillós amb risc de confinament preventiu.", typeMeta: incidentTypeCatalog.chemical },
           { type: "Emergència sanitària col·lectiva", description: "Diverses persones afectades amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical }
         ];
-        const template = templates[Math.floor(Math.random() * templates.length)];
+        const random = weatherModel.random || Math.random;
+        const template = templates[Math.floor(random() * templates.length)];
         const isPopulationSensitive = template.typeMeta.id === "forestFire" || template.typeMeta.id === "chemical";
         const availableMunicipalities = scenarioMunicipalityLocations.length
           ? scenarioMunicipalityLocations
@@ -1238,7 +1359,7 @@
           throw new Error("No hi ha municipis amb coordenades vàlides per generar una incidència.");
         }
         const totalWeight = municipalities.reduce((total, municipality) => total + municipality.weight, 0);
-        let selection = Math.random() * totalWeight;
+        let selection = random() * totalWeight;
         let selectedMunicipality = municipalities[municipalities.length - 1];
         for (const municipality of municipalities) {
           selection -= municipality.weight;
@@ -1272,6 +1393,98 @@
           actions: template.typeMeta.actionList,
           consequences: [template.typeMeta.summary]
         });
+      }
+
+      function evaluateWeatherExposure(municipality, timestamp = simulation.gameTime) {
+        const precipitation = getPrecipitationAt(municipality.coordinates.lat, municipality.coordinates.lng, timestamp);
+        const accumulation = getAccumulatedRainfall(municipality.coordinates.lat, municipality.coordinates.lng, timestamp);
+        const risk = Math.min(96, precipitation.intensity * 1.8 + accumulation.amount * 2.4);
+        return {
+          precipitation,
+          accumulatedRainfall: accumulation.amount,
+          stormId: precipitation.stormId || accumulation.stormId,
+          risk
+        };
+      }
+
+      function processWeatherIncidents() {
+        if (weatherModel.seed === null) return false;
+        for (const incident of incidents) {
+          if (!incident.weatherStormId || isIncidentResolved(incident)) continue;
+          const exposure = evaluateWeatherExposure({
+            coordinates: { lat: incident.coordinates[0], lng: incident.coordinates[1] }
+          });
+          incident.accumulatedRainfall = Math.max(incident.accumulatedRainfall || 0, exposure.accumulatedRainfall);
+          const nextRisk = Math.max(incident.risk || 0, Math.min(96, 38 + exposure.risk));
+          const nextSeverity = getSeverityFromRisk(nextRisk);
+          if (nextSeverity.severity !== incident.severity) {
+            incident.risk = nextRisk;
+            incident.severity = nextSeverity.severity;
+            incident.level = nextSeverity.level;
+            incident.update = `L’acumulació de pluja arriba a ${incident.accumulatedRainfall.toFixed(1)} mm.`;
+            incident.history.unshift({ time: formatSimulationClock(), text: incident.update });
+            if (selectedId === incident.id) renderDetail(incident);
+            refreshIncidentList();
+          } else {
+            incident.risk = nextRisk;
+          }
+        }
+
+        const municipalities = scenarioMunicipalityLocations.length
+          ? scenarioMunicipalityLocations
+          : fallbackScenarioMunicipalities;
+        const impactedMunicipalities = municipalities.map(municipality => ({
+          municipality,
+          exposure: evaluateWeatherExposure(municipality)
+        })).filter(({ exposure }) => exposure.risk >= 24 && exposure.stormId);
+        if (!impactedMunicipalities.length) return false;
+
+        impactedMunicipalities.sort((a, b) => b.exposure.risk - a.exposure.risk);
+        const candidates = impactedMunicipalities.slice(0, Math.min(8, impactedMunicipalities.length));
+        const selected = candidates[Math.floor(weatherModel.random() * candidates.length)];
+        const { municipality, exposure } = selected;
+        const municipalityName = municipality.feature.properties.nom_municipi;
+        const countyName = municipality.feature.properties.nom_comarca;
+        const municipalityKey = municipality.feature.properties.codi_municipi_5 || normalizeAdministrativeName(municipalityName);
+        const episodeKey = `${exposure.stormId}:${municipalityKey}`;
+        const existingIncident = incidents.find(incident =>
+          incident.weatherEpisodeKey === episodeKey && !isIncidentResolved(incident)
+        );
+        if (existingIncident) {
+          existingIncident.accumulatedRainfall = Math.max(existingIncident.accumulatedRainfall || 0, exposure.accumulatedRainfall);
+          existingIncident.risk = Math.max(existingIncident.risk, Math.min(96, 38 + exposure.risk));
+          return true;
+        }
+        if (weatherModel.createdEpisodes.has(episodeKey)) return true;
+
+        const occurrenceChance = Math.min(0.82, 0.2 + exposure.risk / 150);
+        if (weatherModel.random() > occurrenceChance) return true;
+        weatherModel.createdEpisodes.add(episodeKey);
+        const incidentRisk = Math.min(96, Math.round(38 + exposure.risk));
+        const severity = getSeverityFromRisk(incidentRisk);
+        const rainfallDescription = `Pluja de ${exposure.precipitation.intensity.toFixed(1)} mm/h i acumulació de ${exposure.accumulatedRainfall.toFixed(1)} mm.`;
+        const incident = createIncident({
+          id: `INC-PL-${Math.floor(simulation.gameTime)}-${weatherModel.createdEpisodes.size}`,
+          type: "Inundació urbana",
+          shortLocation: municipalityName,
+          location: `${municipalityName} · ${countyName}`,
+          coordinates: [municipality.coordinates.lat, municipality.coordinates.lng],
+          description: `Inundació amb afectació potencial a zones baixes. ${rainfallDescription}`,
+          severity: severity.severity,
+          level: severity.level,
+          state: "Detectat",
+          risk: incidentRisk,
+          calls: "1 comunicació del 112",
+          services: [["Protecció Civil", "1 unitat"], ["Bombers", "En avís"]],
+          update: "Avís del 112: acumulació d’aigua reportada; es verifica l’afectació al municipi.",
+          time: formatSimulationClock(),
+          weatherStormId: exposure.stormId,
+          weatherEpisodeKey: episodeKey,
+          accumulatedRainfall: exposure.accumulatedRainfall,
+          history: [{ time: formatSimulationClock(), text: "Avís del 112 rebut després de precipitacions intenses a la zona." }]
+        });
+        if (incident && selectedId === incident.id) renderDetail(incident);
+        return true;
       }
 
       function evolveIncidents(secondsElapsed) {
@@ -1347,8 +1560,12 @@
         evolveIncidents(realSeconds);
 
         if (simulation.gameTime - simulation.lastGeneratedIncidentAt > 18 * 60 * 1000) {
-          generateScenarioIncident();
+          if (!processWeatherIncidents()) generateScenarioIncident();
           simulation.lastGeneratedIncidentAt = simulation.gameTime;
+        }
+        if (enabledThematicLayers.has("radar") &&
+          simulation.gameTime - radarState.lastSimulationRenderTime >= 5 * 60000) {
+          renderRadar();
         }
 
         simulation.animationFrame = requestAnimationFrame(stepSimulation);
@@ -1356,7 +1573,8 @@
 
       function startSimulation() {
         if (simulation.running) return;
-        if (!simulation.started) refreshRadarLayer();
+        if (weatherModel.seed === null) initializeWeatherModel();
+        refreshRadarLayer();
         simulation.started = true;
         simulation.running = true;
         simulation.paused = false;
@@ -1423,6 +1641,14 @@
         window.assignIncidentResources = assignIncidentResources;
         window.setIncidentState = setIncidentState;
         window.getIncidentList = () => incidents;
+        window.weatherSimulation = {
+          get seed() { return weatherModel.seed; },
+          get storms() { return weatherModel.storms.map(storm => ({ ...storm })); },
+          getWeatherAt,
+          getForecast: (latitude, longitude) => [0, 1, 2, 3].map(hours =>
+            getWeatherAt(latitude, longitude, simulation.gameTime + hours * 3600000)
+          )
+        };
       }
 
       function initializeSimulation() {
