@@ -177,9 +177,8 @@
 
       const markers = new Map();
       let selectedId = null;
-      let activeThematicLayer = null;
-      let activeLayerName = "incidents";
-      let thematicLayers = {
+      const enabledThematicLayers = new Set();
+      const thematicLayers = {
         evacuations: null,
         alert: null,
         radar: null
@@ -297,6 +296,43 @@
       }).map(([name, weight]) => [normalizeAdministrativeName(name), weight]));
 
       function createRadarLayer() {
+        const randomBetween = (minimum, maximum) => minimum + Math.random() * (maximum - minimum);
+        const randomInteger = (minimum, maximum) => Math.floor(randomBetween(minimum, maximum + 1));
+        const seed = randomInteger(1, 999999);
+        const stormCells = Array.from({ length: randomInteger(2, 4) }, () => {
+          const x = randomInteger(180, 820);
+          const y = randomInteger(150, 620);
+          const radiusX = randomInteger(75, 150);
+          const radiusY = randomInteger(55, 115);
+          const driftX = randomInteger(15, 55);
+          const driftY = randomInteger(-25, 25);
+          const duration = randomInteger(18, 38);
+          const delay = randomInteger(-duration, 0);
+          const rotation = randomInteger(-35, 35);
+          const gradient = Math.random() > 0.55 ? "storm" : "rain";
+          return `
+            <g>
+              <ellipse cx="${x}" cy="${y}" rx="${radiusX}" ry="${radiusY}" fill="url(#${gradient})" transform="rotate(${rotation} ${x} ${y})" opacity=".82">
+                <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" begin="${delay}s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values=".62;.9;.62" dur="${randomInteger(8, 16)}s" begin="${delay}s" repeatCount="indefinite"/>
+              </ellipse>
+              <ellipse cx="${x}" cy="${y}" rx="${Math.round(radiusX * 1.55)}" ry="${Math.round(radiusY * 1.45)}" fill="url(#rain)" opacity=".56">
+                <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" begin="${delay}s" repeatCount="indefinite"/>
+              </ellipse>
+            </g>`;
+        }).join("");
+        const rainBands = Array.from({ length: randomInteger(2, 4) }, () => {
+          const startX = randomInteger(80, 450);
+          const startY = randomInteger(180, 620);
+          const width = randomInteger(180, 370);
+          const driftX = randomInteger(30, 100);
+          const driftY = randomInteger(-20, 25);
+          const duration = randomInteger(24, 48);
+          return `
+            <path d="M${startX} ${startY}c${Math.round(width * 0.3)} -${randomInteger(25, 100)} ${Math.round(width * 0.55)} ${randomInteger(-45, 55)} ${width} ${randomInteger(-15, 45)}" fill="none" stroke="${Math.random() > 0.5 ? "#68e47a" : "#35cbd2"}" stroke-width="${randomInteger(12, 26)}" stroke-linecap="round" opacity=".58">
+              <animateTransform attributeName="transform" type="translate" values="0 0;${driftX} ${driftY};0 0" dur="${duration}s" repeatCount="indefinite"/>
+            </path>`;
+        }).join("");
         const radarSvg = `
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760">
             <defs>
@@ -316,17 +352,13 @@
               </radialGradient>
               <filter id="soften"><feGaussianBlur stdDeviation="10"/></filter>
               <filter id="grain">
-                <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="8"/>
+                <feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="${seed}"/>
                 <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .22 0"/>
               </filter>
             </defs>
             <g filter="url(#soften)">
-              <ellipse cx="270" cy="340" rx="150" ry="105" fill="url(#rain)" transform="rotate(-24 270 340)"/>
-              <ellipse cx="520" cy="305" rx="210" ry="135" fill="url(#storm)" transform="rotate(-18 520 305)"/>
-              <ellipse cx="725" cy="425" rx="180" ry="115" fill="url(#rain)" transform="rotate(25 725 425)"/>
-              <ellipse cx="420" cy="555" rx="130" ry="85" fill="url(#rain)" transform="rotate(-8 420 555)"/>
-              <path d="M130 370c92-105 130 25 205-33s125-93 218-35 123 4 255 44" fill="none" stroke="#73e989" stroke-width="34" stroke-linecap="round" opacity=".7"/>
-              <path d="M390 290c54-67 101 48 159-11s89-15 149 18" fill="none" stroke="#f0cf4b" stroke-width="23" stroke-linecap="round" opacity=".8"/>
+              ${stormCells}
+              ${rainBands}
             </g>
             <rect width="100%" height="100%" filter="url(#grain)" opacity=".13"/>
           </svg>`;
@@ -338,6 +370,12 @@
       }
 
       thematicLayers.radar = createRadarLayer();
+
+      function refreshRadarLayer() {
+        if (enabledThematicLayers.has("radar")) thematicLayers.radar.removeFrom(map);
+        thematicLayers.radar = createRadarLayer();
+        if (enabledThematicLayers.has("radar")) thematicLayers.radar.addTo(map);
+      }
 
       function uniqueTopologyFeatures(topology, objectName, propertyName) {
         const geometryCollection = topology.objects[objectName];
@@ -576,9 +614,7 @@
 
           status.hidden = true;
           status.classList.remove("error");
-          if (activeLayerName !== "incidents") {
-            setActiveLayer(activeLayerName);
-          }
+          enabledThematicLayers.forEach(layerName => thematicLayers[layerName]?.addTo(map));
           return true;
         } catch (error) {
           console.error("No s’han pogut carregar els límits municipals i comarcals.", error);
@@ -601,46 +637,59 @@
       }
 
       function setActiveLayer(layerName) {
-        activeLayerName = layerName;
-        if (activeThematicLayer) activeThematicLayer.removeFrom(map);
-        activeThematicLayer = thematicLayers[layerName] || null;
-        if (activeThematicLayer) activeThematicLayer.addTo(map);
+        const layer = thematicLayers[layerName];
+        const isEnabled = enabledThematicLayers.has(layerName);
+        if (isEnabled) {
+          enabledThematicLayers.delete(layerName);
+          layer?.removeFrom(map);
+        } else {
+          enabledThematicLayers.add(layerName);
+          layer?.addTo(map);
+        }
+        const button = document.querySelector(`.layer-option[data-layer="${layerName}"]`);
+        if (button) {
+          button.classList.toggle("selected", !isEnabled);
+          button.setAttribute("aria-pressed", String(!isEnabled));
+        }
+        renderMapLegend();
+      }
 
-        document.querySelectorAll("[data-layer]").forEach(button => {
-          const isSelected = button.dataset.layer === layerName;
-          button.classList.toggle("selected", button.classList.contains("layer-option") && isSelected);
-          button.classList.toggle("active", button.classList.contains("map-tool") && isSelected);
-          button.setAttribute("aria-pressed", String(isSelected));
-        });
-
-        if (layerName === "evacuations") {
-          document.getElementById("map-legend").innerHTML = `
-            <span class="map-legend-caption">Municipis afectats · contorn municipal real</span>
+      function renderMapLegend() {
+        const legends = {
+          evacuations: `
+            <span class="map-legend-caption">Evacuacions i confinaments</span>
             <span class="map-legend-item"><span class="legend-dot evacuated"></span> Evacuació</span>
-            <span class="map-legend-item"><span class="legend-dot confined"></span> Confinament</span>`;
-        } else if (layerName === "alert") {
-          document.getElementById("map-legend").innerHTML = `
-            <span class="map-legend-caption">ES-Alert · totes les comarques (dades de mostra)</span>
+            <span class="map-legend-item"><span class="legend-dot confined"></span> Confinament</span>`,
+          alert: `
+            <span class="map-legend-caption">ES-Alert per comarques</span>
             <span class="map-legend-item"><span class="legend-dot alert-yellow"></span> Groc</span>
             <span class="map-legend-item"><span class="legend-dot alert-orange"></span> Taronja</span>
             <span class="map-legend-item"><span class="legend-dot alert-red"></span> Vermell</span>
-            <span class="map-legend-item"><span class="legend-dot alert-none"></span> Sense avís</span>`;
-        } else if (layerName === "radar") {
-          document.getElementById("map-legend").innerHTML = `
-            <span class="map-legend-caption">Radar de precipitació · simulació inventada</span>
+            <span class="map-legend-item"><span class="legend-dot alert-none"></span> Sense avís</span>`,
+          radar: `
+            <span class="map-legend-caption">Radar de precipitació · simulació</span>
             <span class="map-legend-item"><span class="legend-dot rain-light"></span> Feble</span>
             <span class="map-legend-item"><span class="legend-dot rain-moderate"></span> Moderada</span>
             <span class="map-legend-item"><span class="legend-dot rain-heavy"></span> Forta</span>
-            <span class="map-legend-item"><span class="legend-dot rain-storm"></span> Tempesta</span>`;
-        } else {
-          document.getElementById("map-legend").innerHTML = `
+            <span class="map-legend-item"><span class="legend-dot rain-storm"></span> Tempesta</span>`
+        };
+        const activeLegends = [...enabledThematicLayers].map(layerName => legends[layerName]);
+        document.getElementById("map-legend-items").innerHTML = `
             <span class="map-legend-caption">Incidències actives</span>
             <span class="map-legend-item"><span class="legend-dot"></span> Crítica</span>
             <span class="map-legend-item"><span class="legend-dot high"></span> Important</span>
-            <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>`;
-        }
-
+            <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>
+            ${activeLegends.join("")}`;
       }
+
+      const mapLegend = document.getElementById("map-legend");
+      const mapLegendToggle = document.getElementById("map-legend-toggle");
+      mapLegendToggle.addEventListener("click", () => {
+        const isExpanded = mapLegendToggle.getAttribute("aria-expanded") === "true";
+        mapLegend.classList.toggle("collapsed", isExpanded);
+        mapLegendToggle.setAttribute("aria-expanded", String(!isExpanded));
+        mapLegendToggle.setAttribute("aria-label", isExpanded ? "Ampliar la llegenda" : "Contraure la llegenda");
+      });
 
       function renderIncidentList() {
         for (const incident of incidents) {
@@ -775,12 +824,10 @@
         layerMenu.hidden = isOpen;
       });
       layerMenu.addEventListener("click", event => event.stopPropagation());
-      document.querySelectorAll(".layer-option, .map-tool[data-layer]").forEach(button => {
+      document.querySelectorAll(".layer-option").forEach(button => {
         button.addEventListener("click", event => {
           event.stopPropagation();
           setActiveLayer(button.dataset.layer);
-          layerMenu.hidden = true;
-          layersToggle.setAttribute("aria-expanded", "false");
         });
       });
       document.addEventListener("click", event => {
@@ -1416,6 +1463,7 @@
 
       function startSimulation() {
         if (simulation.running) return;
+        if (!simulation.started) refreshRadarLayer();
         simulation.started = true;
         simulation.running = true;
         simulation.paused = false;

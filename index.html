@@ -90,20 +90,12 @@
         <section class="map-stage" aria-label="Mapa d’incidències de Catalunya">
           <div id="map" role="application" aria-label="Mapa interactiu de Catalunya"></div>
           <div class="map-toolbar" aria-label="Eines del mapa">
-            <button class="map-tool active" type="button" data-layer="incidents" aria-pressed="true">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" stroke-width="1.6"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12.2V21" stroke="currentColor" stroke-width="1.5"/></svg>
-              Incidències
-            </button>
-            <span class="map-toolbar-separator" aria-hidden="true"></span>
             <button class="map-tool" id="layers-toggle" type="button" aria-expanded="false" aria-controls="layer-menu">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="6" r="2" fill="#17232d" stroke="currentColor" stroke-width="1.4"/><circle cx="15" cy="12" r="2" fill="#17232d" stroke="currentColor" stroke-width="1.4"/></svg>
               Capes
             </button>
-            <div class="layer-menu" id="layer-menu" role="group" aria-label="Selecciona una capa del mapa" hidden>
-              <p class="layer-menu-title">Capes temàtiques</p>
-              <button class="layer-option selected" type="button" data-layer="incidents" aria-pressed="true">
-                <span class="layer-option-dot incidents"></span>Només incidències
-              </button>
+            <div class="layer-menu" id="layer-menu" role="group" aria-label="Superposicions del mapa" hidden>
+              <p class="layer-menu-title">Superposicions</p>
               <button class="layer-option" type="button" data-layer="evacuations" aria-pressed="false">
                 <span class="layer-option-dot evacuations"></span>Evacuacions i confinaments
               </button>
@@ -115,11 +107,19 @@
               </button>
             </div>
           </div>
-          <div class="map-legend" id="map-legend" aria-label="Llegenda de gravetat">
-            <span class="map-legend-caption">Incidències actives</span>
-            <span class="map-legend-item"><span class="legend-dot"></span> Crítica</span>
-            <span class="map-legend-item"><span class="legend-dot high"></span> Important</span>
-            <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>
+          <div class="map-legend" id="map-legend" aria-label="Llegenda del mapa">
+            <div class="map-legend-content">
+              <span class="map-legend-title">Llegenda del mapa</span>
+              <div class="map-legend-items" id="map-legend-items">
+                <span class="map-legend-caption">Incidències actives</span>
+                <span class="map-legend-item"><span class="legend-dot"></span> Crítica</span>
+                <span class="map-legend-item"><span class="legend-dot high"></span> Important</span>
+                <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>
+              </div>
+            </div>
+            <button class="map-legend-toggle" id="map-legend-toggle" type="button" aria-expanded="true" aria-controls="map-legend-items" aria-label="Contraure la llegenda">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 7 6 6 6-6M6 12l6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
           </div>
           <div class="map-data-status" id="map-data-status" role="status" aria-live="polite">Carregant límits administratius...</div>
           <div class="map-attribution">
