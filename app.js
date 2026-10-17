@@ -72,6 +72,11 @@
       const list = document.getElementById("incident-list");
       const workspace = document.getElementById("workspace");
       const detailPanel = document.getElementById("detail-panel");
+      const resourceDialog = document.getElementById("resource-dialog");
+      const resourceAssignmentForm = document.getElementById("resource-assignment-form");
+      const resourceAssignmentOptions = document.getElementById("resource-assignment-options");
+      const resourceAssignmentError = document.getElementById("resource-assignment-error");
+      let resourceAssignmentIncidentId = null;
       const map = L.map("map", {
         zoomControl: true,
         scrollWheelZoom: true,
@@ -652,13 +657,20 @@
 
       function markerIcon(incident, selected) {
         const color = incident.level === "critical" ? "#f05252"
-          : incident.level === "high" ? "#f49a4b" : "#d4ad3f";
+          : incident.level === "high" ? "#f49a4b"
+            : incident.level === "warning" ? "#e8c35c"
+              : incident.level === "moderate" ? "#58a9e8" : "#57c392";
         return L.divIcon({
           className: "",
           html: `<div class="incident-marker${selected ? " selected" : ""}" style="--marker-color:${color}"><span>!</span></div>`,
           iconSize: [32, 38],
           iconAnchor: [16, 32]
         });
+      }
+
+      function refreshIncidentMarker(incident) {
+        const marker = markers.get(incident.id);
+        if (marker) marker.setIcon(markerIcon(incident, incident.id === selectedId));
       }
 
       function setActiveLayer(layerName) {
@@ -712,6 +724,8 @@
             <span class="map-legend-item"><span class="legend-dot"></span> Crítica</span>
             <span class="map-legend-item"><span class="legend-dot high"></span> Important</span>
             <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>
+            <span class="map-legend-item"><span class="legend-dot moderate"></span> Baixa</span>
+            <span class="map-legend-item"><span class="legend-dot low"></span> Molt baixa</span>
             ${activeLegends.join("")}`;
       }
 
@@ -1074,6 +1088,31 @@
         return { severity: "Molt baixa", level: "low" };
       }
 
+      function getStableIncidentSeverity(risk, currentLevel, controlled = false) {
+        const hysteresis = 5;
+        const severityByLevel = {
+          critical: { severity: "Crítica", threshold: 85, rank: 4 },
+          high: { severity: "Important", threshold: 60, rank: 3 },
+          warning: { severity: "Seguiment", threshold: 35, rank: 2 },
+          moderate: { severity: "Baixa", threshold: 18, rank: 1 },
+          low: { severity: "Molt baixa", threshold: 0, rank: 0 }
+        };
+        const currentSeverity = severityByLevel[currentLevel];
+        const nextSeverity = getSeverityFromRisk(risk);
+        const nextLevel = severityByLevel[nextSeverity.level];
+        if (!currentSeverity || !nextLevel) return nextSeverity;
+        if (controlled && nextLevel.rank > currentSeverity.rank) {
+          return { severity: currentSeverity.severity, level: currentLevel };
+        }
+        if (nextLevel.rank > currentSeverity.rank && risk < nextLevel.threshold + hysteresis) {
+          return { severity: currentSeverity.severity, level: currentLevel };
+        }
+        if (nextLevel.rank < currentSeverity.rank && risk >= currentSeverity.threshold - hysteresis) {
+          return { severity: currentSeverity.severity, level: currentLevel };
+        }
+        return nextSeverity;
+      }
+
       function ensureIncidentState(incident) {
         if (!incident.state || incident.state === "") incident.state = "Detectat";
       }
@@ -1128,7 +1167,8 @@
         const currentIncident = incident || incidents.find(item => item.id === selectedId);
         if (!currentIncident) return;
         hydrateIncident(currentIncident);
-        const serviceRows = (currentIncident.services || []).map(([name, count]) => `
+        const services = currentIncident.services || [];
+        const serviceRows = services.length ? services.map(([name, count]) => `
           <div class="info-row">
             <span class="resource-name">
               <span class="resource-icon" aria-hidden="true">
@@ -1136,13 +1176,13 @@
               </span>${name}
             </span>
             <span class="resource-count">${count}</span>
-          </div>`).join("");
+          </div>`).join("") : `<p class="timeline-copy">Encara no s’ha mobilitzat cap servei.</p>`;
 
         const actionMarkup = `
           <button class="action-button primary" data-action="assign" type="button">Assignar recursos</button>
           <button class="action-button" data-action="observe" type="button">Registrar observació</button>
           <button class="action-button" data-action="control" type="button">Marcar controlat</button>
-          <button class="action-button" data-action="resolve" type="button">Resoldre</button>
+          <button class="action-button" data-action="es-alert" type="button" title="Funcionalitat pendent de configuració" disabled>Enviar ES-ALERT</button>
         `;
 
         document.getElementById("detail-title").textContent = currentIncident.type;
@@ -1167,7 +1207,7 @@
             </div>
           </section>
           <section class="detail-section">
-            <h3 class="detail-section-title">Serveis mobilitzats <span class="section-trailing">${(currentIncident.services || []).length} organismes</span></h3>
+            <h3 class="detail-section-title">Serveis mobilitzats <span class="section-trailing">${services.length} ${services.length === 1 ? "organisme" : "organismes"}</span></h3>
             <div class="resource-list">${serviceRows}</div>
           </section>
           <section class="detail-section">
@@ -1186,14 +1226,15 @@
             </div>
           </section>`;
 
-        document.querySelectorAll(".action-button").forEach(button => {
+        detailPanel.querySelectorAll(".action-button").forEach(button => {
           const action = button.dataset.action;
-          button.disabled = /resol|tancat/i.test(currentIncident.state) && action !== "observe";
+          button.disabled = isIncidentResolved(currentIncident) ||
+            action === "es-alert" ||
+            (action === "control" && currentIncident.state === "Controlat");
           button.addEventListener("click", () => {
             if (action === "assign") assignIncidentResources(currentIncident.id);
             else if (action === "observe") addIncidentObservation(currentIncident.id);
             else if (action === "control") setIncidentState(currentIncident.id, "Controlat");
-            else if (action === "resolve") setIncidentState(currentIncident.id, "Resolut");
           });
         });
       }
@@ -1246,10 +1287,14 @@
         if (!validStates.includes(normalized)) {
           throw new Error(`Estat no vàlid: ${nextState}`);
         }
-        incident.state = normalized;
-        incident.update = `Canvi d’estat: ${normalized}.`;
-        incident.history = incident.history || [];
-        incident.history.unshift({ time: formatSimulationClock(), text: `Estat actualitzat a ${normalized}.` });
+        if (normalized === "Controlat") {
+          controlIncident(incident, "Incidència controlada; el risc i la gravetat s’han reduït.");
+        } else {
+          incident.state = normalized;
+          incident.update = `Canvi d’estat: ${normalized}.`;
+          incident.history = incident.history || [];
+          incident.history.unshift({ time: formatSimulationClock(), text: `Estat actualitzat a ${normalized}.` });
+        }
         if (isIncidentResolved(incident)) {
           const marker = markers.get(incident.id);
           if (marker) {
@@ -1262,23 +1307,131 @@
         }
 
         refreshIncidentList();
+        refreshIncidentMarker(incident);
         if (selectedId === id && !isIncidentResolved(incident)) renderDetail(incident);
         return incident;
       }
 
-      function assignIncidentResources(id) {
+      function lowerIncidentSeverity(incident) {
+        const currentSeverity = getSeverityFromRisk(incident.risk);
+        const nextRiskCeiling = {
+          critical: 84,
+          high: 59,
+          warning: 34,
+          moderate: 17
+        }[currentSeverity.level];
+        if (nextRiskCeiling === undefined) return false;
+        incident.risk = Math.min(incident.risk, nextRiskCeiling);
+        const nextSeverity = getSeverityFromRisk(incident.risk);
+        incident.severity = nextSeverity.severity;
+        incident.level = nextSeverity.level;
+        return true;
+      }
+
+      function controlIncident(incident, update) {
+        const wasControlled = incident.state === "Controlat";
+        if (!wasControlled) incident.controlledAt = simulation.gameTime;
+        incident.state = "Controlat";
+        if (!wasControlled) lowerIncidentSeverity(incident);
+        incident.update = update;
+        incident.history = incident.history || [];
+        incident.history.unshift({ time: formatSimulationClock(), text: `${update} Gravetat actual: ${incident.severity}.` });
+        refreshIncidentMarker(incident);
+      }
+
+      const incidentResourceOptions = {
+        forestFire: ["Bombers", "Agents Rurals", "Protecció Civil", "Mossos d’Esquadra"],
+        flood: ["Bombers", "Protecció Civil", "Mossos d’Esquadra", "Agència Catalana de l’Aigua"],
+        rain: ["Bombers", "Protecció Civil", "Mossos d’Esquadra", "Agència Catalana de l’Aigua"],
+        traffic: ["SEM", "Mossos d’Esquadra", "Bombers", "Protecció Civil"],
+        chemical: ["Bombers", "Mossos d’Esquadra", "SEM", "Protecció Civil"],
+        medical: ["SEM", "Mossos d’Esquadra", "Protecció Civil"]
+      };
+      const incidentResolutionMinutes = {
+        forestFire: 360,
+        flood: 240,
+        rain: 180,
+        traffic: 120,
+        chemical: 480,
+        medical: 360
+      };
+
+      function openResourceAssignmentDialog(incident) {
+        resourceAssignmentIncidentId = incident.id;
+        const resources = incidentResourceOptions[incident.typeKey] || ["Bombers", "Mossos d’Esquadra", "SEM", "Protecció Civil"];
+        resourceAssignmentOptions.innerHTML = resources.map((name, index) => `
+          <div class="resource-assignment-row">
+            <label class="resource-assignment-label">
+              <input type="checkbox" name="resource" value="${name}">
+              ${name}
+            </label>
+            <span class="resource-assignment-quantity">
+              <input type="number" name="quantity" min="1" max="50" value="1" aria-label="Nombre d’unitats de ${name}" disabled>
+              unitats
+            </span>
+          </div>`).join("");
+        resourceAssignmentError.hidden = true;
+        resourceDialog.showModal();
+      }
+
+      resourceAssignmentOptions.addEventListener("change", event => {
+        if (event.target.matches('input[type="checkbox"]')) {
+          event.target.closest(".resource-assignment-row").querySelector('input[type="number"]').disabled = !event.target.checked;
+        }
+      });
+      resourceAssignmentForm.addEventListener("submit", event => {
+        event.preventDefault();
+        const assignments = [...resourceAssignmentOptions.querySelectorAll(".resource-assignment-row")]
+          .filter(row => row.querySelector('input[type="checkbox"]').checked)
+          .map(row => ({
+            name: row.querySelector('input[type="checkbox"]').value,
+            count: Number(row.querySelector('input[type="number"]').value)
+          }));
+        if (!assignments.length) {
+          resourceAssignmentError.hidden = false;
+          return;
+        }
+        assignIncidentResources(resourceAssignmentIncidentId, assignments);
+        resourceDialog.close();
+      });
+      document.getElementById("close-resource-dialog").addEventListener("click", () => resourceDialog.close());
+      document.getElementById("cancel-resource-assignment").addEventListener("click", () => resourceDialog.close());
+      resourceDialog.addEventListener("close", () => {
+        resourceAssignmentIncidentId = null;
+      });
+
+      function assignIncidentResources(id, assignments = null) {
         const incident = incidents.find(item => item.id === id);
         if (!incident) return null;
         hydrateIncident(incident);
-        const resourceName = incident.type.includes("Incendi") ? "Bombers" : incident.type.includes("Inund") ? "Protecció Civil" : "SEM";
-        incident.resourcesAssigned += 1;
+        if (!assignments) {
+          openResourceAssignmentDialog(incident);
+          return incident;
+        }
+        if (!Array.isArray(assignments) || assignments.length === 0 ||
+          assignments.some(({ name, count }) =>
+            typeof name !== "string" || !name.trim() || !Number.isInteger(count) || count < 1 || count > 50
+          )) {
+          throw new Error("Cal assignar com a mínim un recurs amb una quantitat entre 1 i 50 unitats.");
+        }
+        let assignedCount = 0;
+        for (const { name, count } of assignments) {
+          const existingService = incident.services.find(service => service[0] === name);
+          const existingCount = existingService ? Number.parseInt(existingService[1], 10) : 0;
+          const nextCount = (Number.isFinite(existingCount) ? existingCount : 0) + count;
+          if (existingService) existingService[1] = `${nextCount} ${nextCount === 1 ? "unitat" : "unitats"}`;
+          else incident.services.push([name, `${count} ${count === 1 ? "unitat" : "unitats"}`]);
+          assignedCount += count;
+        }
+        incident.resourcesAssigned += assignedCount;
         if (!incident.assignedAt || incident.assignedAt === 0) {
           incident.assignedAt = simulation.gameTime;
         }
-        incident.state = "En intervenció";
-        incident.update = `Recursos assignats: ${resourceName}.`;
+        if (incident.state !== "Controlat") incident.state = "En intervenció";
+        const resourceSummary = assignments.map(({ name, count }) => `${name}: ${count}`).join(", ");
+        incident.update = `Recursos assignats (${resourceSummary} unitats).`;
         incident.history = incident.history || [];
-        incident.history.unshift({ time: formatSimulationClock(), text: `Assignat ${resourceName} al lloc.` });
+        incident.history.unshift({ time: formatSimulationClock(), text: `Recursos mobilitzats: ${resourceSummary}.` });
         refreshIncidentList();
         if (selectedId === id) renderDetail(incident);
         return incident;
@@ -1306,7 +1459,7 @@
         incident.level = incident.level || getSeverityFromRisk(incident.risk || 52).level;
         incident.state = incident.state || "Detectat";
         incident.update = incident.update || "Incidència registrada a la sala de coordinació.";
-        incident.services = incident.services || [["Protecció Civil", "1 unitat"]];
+        incident.services = Array.isArray(incident.services) ? incident.services : [];
         incident.coordinates = incident.coordinates || [41.8, 1.9];
         incident.description = incident.description || "Incidència creada manualment al sistema de simulació.";
       }
@@ -1325,7 +1478,7 @@
         const marker = L.marker(incident.coordinates, { icon: markerIcon(incident, false) }).addTo(map);
         marker.bindTooltip(`${incident.type} · ${incident.shortLocation}`, { direction: "top", offset: [0, -22] });
         marker.on("click", () => {
-          selectIncident(incident.id, false);
+          selectIncident(incident.id, true);
           document.querySelector(`[data-id="${incident.id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         });
         markers.set(incident.id, marker);
@@ -1391,7 +1544,7 @@
           risk: baseRisk,
           populationRisk: template.typeMeta.populationRisk * 100,
           calls: "1 comunicació",
-          services: [["Protecció Civil", "1 unitat"]],
+          services: [],
           update: "Nova incidència generada automàticament segons l’escenari de coordinació.",
           time: formatSimulationClock(),
           actions: template.typeMeta.actionList,
@@ -1420,11 +1573,12 @@
           });
           incident.accumulatedRainfall = Math.max(incident.accumulatedRainfall || 0, exposure.accumulatedRainfall);
           const nextRisk = Math.max(incident.risk || 0, Math.min(96, 38 + exposure.risk));
-          const nextSeverity = getSeverityFromRisk(nextRisk);
+          const nextSeverity = getStableIncidentSeverity(nextRisk, incident.level);
           if (nextSeverity.severity !== incident.severity) {
             incident.risk = nextRisk;
             incident.severity = nextSeverity.severity;
             incident.level = nextSeverity.level;
+            refreshIncidentMarker(incident);
             incident.update = `L’acumulació de pluja arriba a ${incident.accumulatedRainfall.toFixed(1)} mm.`;
             incident.history.unshift({ time: formatSimulationClock(), text: incident.update });
             if (selectedId === incident.id) renderDetail(incident);
@@ -1479,7 +1633,7 @@
           state: "Detectat",
           risk: incidentRisk,
           calls: "1 comunicació del 112",
-          services: [["Protecció Civil", "1 unitat"], ["Bombers", "En avís"]],
+          services: [],
           update: "Avís del 112: acumulació d’aigua reportada; es verifica l’afectació al municipi.",
           time: formatSimulationClock(),
           weatherStormId: exposure.stormId,
@@ -1500,16 +1654,31 @@
           if (/Tancat|Resolut/i.test(incident.state)) continue;
           let incidentDetailsChanged = false;
 
-          const threat = incident.typeKey === "incendi" ? 0.8 : incident.typeKey === "inundacio" ? 0.55 : incident.typeKey === "pluges" ? 0.4 : incident.typeKey === "accident-trafic" ? 0.38 : incident.typeKey === "accident-quimic" ? 0.7 : incident.typeKey === "sanitaria" ? 0.2 : 0.3;
+          const threat = {
+            forestFire: 0.8,
+            flood: 0.55,
+            rain: 0.4,
+            traffic: 0.38,
+            chemical: 0.7,
+            medical: 0.2
+          }[incident.typeKey] || 0.3;
           const trend = Math.sin((simulation.gameTime / 180000) + incident.coordinates[0] + incident.coordinates[1]) * 0.6;
-          const resourceModifier = incident.resourcesAssigned ? -0.42 : 0.18;
-          const riskDelta = (trend + threat + resourceModifier) * factor;
+          const resourceModifier = incident.resourcesAssigned
+            ? -0.75 - Math.min(incident.resourcesAssigned, 6) * 0.1
+            : 0.18;
+          const controlModifier = incident.state === "Controlat" ? -0.45 : 0;
+          const riskDelta = (trend + threat + resourceModifier + controlModifier) * factor;
           incident.risk = Math.max(6, Math.min(96, (incident.risk || 50) + riskDelta));
 
-          const nextSeverity = getSeverityFromRisk(incident.risk);
+          const nextSeverity = getStableIncidentSeverity(
+            incident.risk,
+            incident.level,
+            incident.state === "Controlat"
+          );
           if (incident.severity !== nextSeverity.severity) {
             incident.severity = nextSeverity.severity;
             incident.level = nextSeverity.level;
+            refreshIncidentMarker(incident);
             incident.update = `Gravetat actualitzada a ${nextSeverity.severity.toLowerCase()} segons l’evolució del focus.`;
             incident.history = incident.history || [];
             incident.history.unshift({ time: formatSimulationClock(), text: `Gravetat actualitzada: ${nextSeverity.severity}.` });
@@ -1526,20 +1695,34 @@
           }
 
           const elapsedAssignedTime = incident.assignedAt ? (simulation.gameTime - incident.assignedAt) : 0;
-          if (incident.resourcesAssigned > 0 && elapsedAssignedTime > 60 * 60 * 1000 && !/Controlat|Resolut|Tancat/.test(incident.state)) {
-            incident.state = "Controlat";
-            incident.update = "L’incident està controlat i se’n monitoritza la resolució.";
-            incident.history.unshift({ time: formatSimulationClock(), text: "Incidència controlada per l’equip assignat." });
+          const resolutionMinutes = incidentResolutionMinutes[incident.typeKey] || 240;
+          const resolutionDuration = resolutionMinutes * 60 * 1000;
+          const elapsedControlledTime = incident.controlledAt
+            ? simulation.gameTime - incident.controlledAt
+            : 0;
+          if (incident.resourcesAssigned > 0 &&
+            elapsedAssignedTime >= resolutionDuration * 0.25 &&
+            incident.state !== "Controlat") {
+            controlIncident(incident, "La intervenció ha contingut l’incident; se’n monitoritza l’evolució.");
             shouldRefreshIncidentList = true;
             incidentDetailsChanged = true;
           }
 
-          if (incident.resourcesAssigned > 0 && elapsedAssignedTime > 90 * 60 * 1000 && !/Resolut|Tancat/.test(incident.state)) {
-            incident.state = "Resolut";
-            incident.update = "L’incident s’ha resolt i queda disponible a l’historial operatiu.";
-            incident.history.unshift({ time: formatSimulationClock(), text: "Incidència resolta i tancada en l’historial." });
+          const resolutionTimeReached = incident.resourcesAssigned > 0
+            ? elapsedAssignedTime >= resolutionDuration
+            : incident.controlledAt && elapsedControlledTime >= resolutionDuration;
+          if (resolutionTimeReached) {
+            incident.state = "Tancat";
+            incident.update = "La incidència s’ha resolt després del temps estimat d’intervenció.";
+            incident.history.unshift({ time: formatSimulationClock(), text: "Incidència resolta i tancada automàticament." });
+            const marker = markers.get(incident.id);
+            if (marker) {
+              marker.remove();
+              markers.delete(incident.id);
+            }
+            if (selectedId === incident.id) closeDetail();
             shouldRefreshIncidentList = true;
-            incidentDetailsChanged = true;
+            continue;
           }
 
           if (selectedId === incident.id) {
@@ -1561,7 +1744,7 @@
         const gameSeconds = realSeconds * (simulation.speedRates[simulation.speed] || 1);
         simulation.gameTime += gameSeconds * 1000;
         updateSimulationClock();
-        evolveIncidents(realSeconds);
+        evolveIncidents(gameSeconds);
 
         if (simulation.gameTime - simulation.lastGeneratedIncidentAt > 18 * 60 * 1000) {
           if (!processWeatherIncidents()) generateScenarioIncident();

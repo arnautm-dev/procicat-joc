@@ -132,6 +132,8 @@
                 <span class="map-legend-item"><span class="legend-dot"></span> Crítica</span>
                 <span class="map-legend-item"><span class="legend-dot high"></span> Important</span>
                 <span class="map-legend-item"><span class="legend-dot warning"></span> Seguiment</span>
+                <span class="map-legend-item"><span class="legend-dot moderate"></span> Baixa</span>
+                <span class="map-legend-item"><span class="legend-dot low"></span> Molt baixa</span>
               </div>
             </div>
             <button class="map-legend-toggle" id="map-legend-toggle" type="button" aria-expanded="true" aria-controls="map-legend-items" aria-label="Contraure la llegenda">
@@ -157,6 +159,26 @@
           <div class="detail-scroll" id="detail-content"></div>
         </aside>
       </div>
+      <dialog class="resource-dialog" id="resource-dialog" aria-labelledby="resource-dialog-title" aria-describedby="resource-dialog-description">
+        <form id="resource-assignment-form">
+          <div class="resource-dialog-header">
+            <div>
+              <p class="eyebrow">Mobilització de serveis</p>
+              <h2 class="panel-title" id="resource-dialog-title">Assignar recursos</h2>
+            </div>
+            <button class="icon-button" id="close-resource-dialog" type="button" aria-label="Tanca el panell">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <p class="resource-dialog-copy" id="resource-dialog-description">Selecciona els serveis i el nombre d’unitats que vols mobilitzar.</p>
+          <div class="resource-assignment-options" id="resource-assignment-options"></div>
+          <p class="resource-assignment-error" id="resource-assignment-error" role="alert" hidden>Selecciona almenys un servei per continuar.</p>
+          <div class="resource-dialog-actions">
+            <button class="action-button" id="cancel-resource-assignment" type="button">Cancel·lar</button>
+            <button class="action-button primary" type="submit">Confirmar assignació</button>
+          </div>
+        </form>
+      </dialog>
     </main>
 
     <script

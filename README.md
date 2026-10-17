@@ -24,6 +24,7 @@ La interfície està dividida en tres blocs principals:
    - Mostra la llista d’emergències actives.
    - Cada element inclou tipus, ubicació, gravetat, hora i estat.
    - Els elements són botons que disparen la selecció d’una incidència concreta.
+   - En marcar una incidència com a controlada, el seu risc i la seva gravetat baixen; la icona del mapa i la targeta reflecteixen el nou nivell.
 
 2. Mapa principal
    - S’utilitza Leaflet per crear un mapa interactiu centrat a Catalunya.
@@ -35,6 +36,7 @@ La interfície està dividida en tres blocs principals:
    - Apareix quan es selecciona una incidència.
    - Mostra descripció, serveis implicats, informació operativa i altres metadades.
    - El panell es sincronitza amb la selecció del mapa i de la llista.
+   - L’assignació obre un formulari per triar serveis i unitats. Les incidències es tanquen automàticament després d’un termini estimat segons el tipus d’incident.
 
 ## Dades i model de domini
 
