@@ -93,33 +93,17 @@
       let selectedId = null;
       const enabledThematicLayers = new Set();
       const thematicLayers = {
-        evacuations: null,
         alert: null,
         radar: null
       };
 
       const boundaryDataBaseUrl = "https://raw.githubusercontent.com/ArnauInes/geometries_cat_bcn_2024/main/";
-      const alertLevels = new Map([
-        ["Alt Empordà", "orange"],
-        ["Baix Empordà", "red"],
-        ["Gironès", "yellow"],
-        ["Bages", "yellow"],
-        ["Barcelonès", "orange"],
-        ["Tarragonès", "red"]
-      ]);
-      const municipalityStatuses = new Map([
-        ["17160", "evacuated"],
-        ["43148", "confined"],
-        ["08113", "confined"]
-      ]);
+      const alertLevels = new Map();
+      const municipalityStatuses = new Map();
       const alertColors = {
         yellow: "#f2d54a",
         orange: "#f49a4b",
         red: "#f05252"
-      };
-      const municipalityColors = {
-        evacuated: "#f05252",
-        confined: "#e8c35c"
       };
       let municipalityFeatures = [];
       let countyFeatures = [];
@@ -425,33 +409,6 @@
         }).features;
       }
 
-      function evacuationStyle(feature) {
-        const status = municipalityStatuses.get(feature.properties.codi_municipi_5);
-        const color = municipalityColors[status];
-        return {
-          color,
-          weight: 2,
-          opacity: 1,
-          fillColor: color,
-          fillOpacity: 0.42
-        };
-      }
-
-      function createEvacuationLayer() {
-        return L.geoJSON([], { style: evacuationStyle });
-      }
-
-      function refreshEvacuationLayer() {
-        const layer = thematicLayers.evacuations;
-        if (!layer) return;
-        layer.clearLayers();
-        municipalityFeatures.forEach(feature => {
-          if (municipalityStatuses.has(feature.properties.codi_municipi_5)) {
-            layer.addData(feature);
-          }
-        });
-      }
-
       function countyStyle(feature) {
         const level = alertLevels.get(feature.properties.nom_comarca);
         const color = level ? alertColors[level] : "#73838a";
@@ -519,7 +476,6 @@
         const code = feature.properties.codi_municipi_5;
         if (nextStatus === "none") municipalityStatuses.delete(code);
         else municipalityStatuses.set(code, nextStatus);
-        refreshEvacuationLayer();
         return getMunicipalityStatus(code);
       }
 
@@ -637,10 +593,8 @@
             normalizeAdministrativeName(feature.properties.nom_comarca),
             feature
           ]));
-          thematicLayers.evacuations = createEvacuationLayer();
           thematicLayers.alert = createAlertLayer(countyFeatures);
           boundaryDataLoaded = true;
-          refreshEvacuationLayer();
 
           status.hidden = true;
           status.classList.remove("error");
@@ -701,10 +655,6 @@
 
       function renderMapLegend() {
         const legends = {
-          evacuations: `
-            <span class="map-legend-caption">Evacuacions i confinaments</span>
-            <span class="map-legend-item"><span class="legend-dot evacuated"></span> Evacuació</span>
-            <span class="map-legend-item"><span class="legend-dot confined"></span> Confinament</span>`,
           alert: `
             <span class="map-legend-caption">ES-Alert per comarques</span>
             <span class="map-legend-item"><span class="legend-dot alert-yellow"></span> Groc</span>

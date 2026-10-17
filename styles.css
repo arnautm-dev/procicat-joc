@@ -564,10 +564,6 @@
         background: #91a0a4;
       }
 
-      .layer-option-dot.evacuations {
-        background: linear-gradient(135deg, var(--color-critical) 50%, var(--color-warning) 50%);
-      }
-
       .layer-option-dot.alert {
         background: linear-gradient(135deg, #f05252 50%, #f49a4b 50%);
       }
@@ -744,16 +740,6 @@
         gap: 6px;
         color: #c2ced1;
         font-size: 9px;
-      }
-
-      .map-legend-item .legend-dot.evacuated {
-        background: var(--color-critical);
-        box-shadow: 0 0 0 3px rgb(240 82 82 / 15%);
-      }
-
-      .map-legend-item .legend-dot.confined {
-        background: var(--color-warning);
-        box-shadow: 0 0 0 3px rgb(232 195 92 / 15%);
       }
 
       .map-legend-item .legend-dot.alert-yellow {
