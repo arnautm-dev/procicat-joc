@@ -94,6 +94,7 @@
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="6" r="2" fill="#17232d" stroke="currentColor" stroke-width="1.4"/><circle cx="15" cy="12" r="2" fill="#17232d" stroke="currentColor" stroke-width="1.4"/></svg>
               Capes
             </button>
+            <button class="map-tool es-alert-open" id="open-es-alert" type="button" hidden>ES-Alert <span id="es-alert-active-count">0</span></button>
             <div class="layer-menu" id="layer-menu" role="group" aria-label="Superposicions del mapa" hidden>
               <p class="layer-menu-title">Superposicions</p>
               <button class="layer-option" type="button" data-layer="alert" aria-pressed="false">
@@ -175,6 +176,86 @@
             <button class="action-button primary" type="submit">Confirmar assignació</button>
           </div>
         </form>
+      </dialog>
+      <dialog class="es-alert-dialog" id="es-alert-dialog" aria-labelledby="es-alert-title">
+        <form id="es-alert-form">
+          <div class="resource-dialog-header">
+            <div>
+              <p class="eyebrow">Protecció civil · ES-Alert</p>
+              <h2 class="panel-title" id="es-alert-title">Gestió d’alertes</h2>
+            </div>
+            <button class="icon-button" id="close-es-alert" type="button" aria-label="Tanca el panell">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <section class="es-alert-section">
+            <h3 class="detail-section-title">Comarques seleccionades <span class="section-trailing" id="es-alert-county-count">0</span></h3>
+            <div class="es-alert-county-list" id="es-alert-county-list"></div>
+          </section>
+          <section class="es-alert-section">
+            <h3 class="detail-section-title">Nova alerta</h3>
+            <label class="es-alert-field">Nivell
+              <select id="es-alert-level" required>
+                <option value="low">Baix</option>
+                <option value="medium" selected>Mitjà</option>
+                <option value="high">Alt</option>
+              </select>
+            </label>
+            <label class="es-alert-field">Tipus d’emergència
+              <select id="es-alert-category" required>
+                <option value="flood">Pluges intenses i inundacions</option>
+                <option value="fire">Incendis forestals</option>
+                <option value="chemical">Accidents químics i núvols tòxics</option>
+                <option value="medical">Emergències sanitàries col·lectives</option>
+                <option value="manual">Altres / redacció manual</option>
+              </select>
+            </label>
+            <label class="es-alert-field">Missatge disponible
+              <select id="es-alert-template"></select>
+            </label>
+            <p class="es-alert-notice" id="es-alert-message-status" role="status" hidden></p>
+            <label class="es-alert-field">Missatge en català
+              <textarea id="es-alert-message-ca" rows="4" required></textarea>
+            </label>
+            <label class="es-alert-field">Missatge en castellà
+              <textarea id="es-alert-message-es" rows="4" required></textarea>
+            </label>
+            <div class="es-alert-preview">
+              <h3 class="detail-section-title">Previsualització</h3>
+              <p class="es-alert-preview-counties" id="es-alert-preview-counties"></p>
+              <p class="es-alert-preview-message" id="es-alert-preview-message"></p>
+            </div>
+            <p class="resource-assignment-error" id="es-alert-form-error" role="alert" hidden></p>
+            <div class="resource-dialog-actions">
+              <button class="action-button" id="cancel-es-alert" type="button">Tancar</button>
+              <button class="action-button primary" id="send-es-alert" type="submit">Enviar ES-Alert</button>
+            </div>
+          </section>
+          <section class="es-alert-section">
+            <h3 class="detail-section-title">Alertes actives i historial</h3>
+            <div class="es-alert-record-list" id="es-alert-record-list"></div>
+            <div class="es-alert-record-detail" id="es-alert-record-detail"></div>
+          </section>
+          <section class="es-alert-section">
+            <h3 class="detail-section-title">Cronologia d’ES-Alert</h3>
+            <div class="es-alert-timeline" id="es-alert-timeline"></div>
+          </section>
+        </form>
+      </dialog>
+      <dialog class="es-alert-phone-dialog" id="es-alert-phone-dialog" aria-labelledby="es-alert-phone-title">
+        <div class="es-alert-phone-wrap">
+          <div class="es-alert-phone">
+            <div class="es-alert-phone-status"><span>PROCICOORD</span><span>ES-Alert</span></div>
+            <div class="es-alert-phone-content">
+              <p class="es-alert-phone-kicker" id="es-alert-phone-level"></p>
+              <h2 id="es-alert-phone-title">Alerta de Protecció Civil</h2>
+              <p class="es-alert-phone-counties" id="es-alert-phone-counties"></p>
+              <p class="es-alert-phone-message" id="es-alert-phone-message"></p>
+            </div>
+            <button class="action-button primary" id="close-es-alert-preview" type="button">Tanca la previsualització</button>
+          </div>
+          <p class="es-alert-audio-status" id="es-alert-audio-status" role="status"></p>
+        </div>
       </dialog>
     </main>
 

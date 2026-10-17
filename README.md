@@ -85,14 +85,16 @@ Això permet localitzar ràpidament qualsevol entitat i valora la validació d�
 
 ## Capes temàtiques
 
-El sistema defineix quatre modes de visualització del mapa:
+El sistema incorpora una capa de comarques per a ES-Alert i una capa de radar de precipitació:
 
-- `incidents`: mostra només les incidències actives.
-- `evacuations`: sobreposa municipis amb estats de confinament o evacuació.
-- `alert`: sobreposa comarques segons el nivell d’alerta.
-- `radar`: genera una capa decorativa de precipitació mitjançant SVG.
+- `alert`: mostra les alertes actives per comarca i permet seleccionar-ne diverses amb el mapa. El contorn turquesa identifica la selecció; el farcit groc, taronja o vermell identifica el nivell d’una alerta activa.
+- `radar`: mostra la previsió de precipitació de la simulació.
 
-La qualitat visual de les capes ve determinada per funcions com `evacuationStyle()`, `countyStyle()`, `createEvacuationLayer()` i `createAlertLayer()`. Això permet aplicar colors i patrons diferents segons el tipus de capa sense perdre la consistència del mapa.
+### Gestió d’ES-Alert
+
+El panell ES-Alert crea un registre independent per comarca amb identificador, nivell, tipus, missatge bilingüe, hora d’enviament i estat. En enviar a diverses comarques, es crea una alerta per cadascuna. Si una comarca ja té una alerta activa, aquesta es marca com a substituïda i es conserva a l’historial; les alertes actives de les altres comarques no canvien. Les plantilles s’obtenen de `es-alert-messages.md`; quan una categoria no té una plantilla, cal redactar el text català i castellà manualment. El so de previsualització és `sounds/es-alert-sound.mp3`; es repeteix mentre la vista de mòbil és oberta i s’atura en tancar-la, sense finalitzar l’alerta.
+
+L’enviament redueix el risc numèric de les emergències actives del mateix tipus i comarca: 10 punts per nivell baix, 20 per mitjà i 30 per alt, amb un mínim de 0 sobre l’escala existent de 0 a 100. L’alerta vigent també s’aplica una sola vegada a cada nova emergència coincident creada mentre continua activa. La reducció màxima ja aplicada es registra per tipus d’emergència per evitar duplicats en actualitzacions o substitucions; finalitzar o substituir una alerta no canvia l’estat ni restaura el risc. Els enviaments, les substitucions i les finalitzacions queden a la cronologia d’alertes i, per a les incidències afectades, a la seva activitat.
 
 ## API global d’administració
 

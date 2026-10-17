@@ -99,6 +99,19 @@
 
       const boundaryDataBaseUrl = "https://raw.githubusercontent.com/ArnauInes/geometries_cat_bcn_2024/main/";
       const alertLevels = new Map();
+      const selectedCounties = new Set();
+      const esAlerts = [];
+      let selectedEsAlertId = null;
+      let esAlertMessageCatalogPromise = null;
+      let esAlertMessageCatalog = null;
+      let esAlertPreviewAudio = null;
+      let nextEsAlertSequence = 1;
+      let nextEsAlertEventSequence = 1;
+      const esAlertLevelDetails = {
+        low: { label: "Baix", color: "yellow", reduction: 10 },
+        medium: { label: "Mitjà", color: "orange", reduction: 20 },
+        high: { label: "Alt", color: "red", reduction: 30 }
+      };
       const municipalityStatuses = new Map();
       const alertColors = {
         yellow: "#f2d54a",
@@ -409,20 +422,51 @@
         }).features;
       }
 
+      function getCountyAlertColor(county) {
+        const activeAlert = esAlerts.find(alert => alert.status === "active" && alert.county === county);
+        const legacyLevel = alertLevels.get(county);
+        return activeAlert
+          ? alertColors[esAlertLevelDetails[activeAlert.level].color]
+          : legacyLevel ? alertColors[legacyLevel] : null;
+      }
+
       function countyStyle(feature) {
-        const level = alertLevels.get(feature.properties.nom_comarca);
-        const color = level ? alertColors[level] : "#73838a";
+        const county = feature.properties.nom_comarca;
+        const selected = selectedCounties.has(county);
+        const alertColor = getCountyAlertColor(county);
+        const color = alertColor || (selected ? "#56b5a8" : "#73838a");
         return {
-          color,
-          weight: 1.4,
-          opacity: level ? 0.95 : 0.7,
+          className: "es-alert-county-boundary",
+          color: selected ? "#56b5a8" : color,
+          weight: selected ? 3 : alertColor ? 1.8 : 1.4,
+          opacity: selected || alertColor ? 0.98 : 0.7,
           fillColor: color,
-          fillOpacity: level ? 0.36 : 0
+          fillOpacity: alertColor ? (selected ? 0.4 : 0.36) : selected ? 0.28 : 0
         };
       }
 
       function createAlertLayer(features) {
-        return L.geoJSON(features, { style: countyStyle });
+        return L.geoJSON(features, {
+          style: countyStyle,
+          onEachFeature(feature, layer) {
+            layer.on("click", event => {
+              if (!enabledThematicLayers.has("alert")) return;
+              L.DomEvent.stopPropagation(event.originalEvent);
+              toggleCountySelection(feature.properties.nom_comarca);
+            });
+          }
+        });
+      }
+
+      function refreshCountyLayer() {
+        thematicLayers.alert?.setStyle(countyStyle);
+      }
+
+      function toggleCountySelection(county) {
+        if (selectedCounties.has(county)) selectedCounties.delete(county);
+        else selectedCounties.add(county);
+        refreshCountyLayer();
+        renderSelectedAlertCounties();
       }
 
       function normalizeAdministrativeName(value) {
@@ -489,10 +533,12 @@
 
       function getCountyAlert(county) {
         const feature = findAdministrativeFeature(county, countiesByCode, countiesByName, "comarca");
+        const color = getCountyAlertColor(feature.properties.nom_comarca);
+        const level = Object.entries(alertColors).find(([, candidateColor]) => candidateColor === color)?.[0] || "none";
         return {
           name: feature.properties.nom_comarca,
           code: feature.properties.codi_comarca,
-          level: alertLevels.get(feature.properties.nom_comarca) || "none"
+          level
         };
       }
 
@@ -516,7 +562,7 @@
         const name = feature.properties.nom_comarca;
         if (nextLevel === "none") alertLevels.delete(name);
         else alertLevels.set(name, nextLevel);
-        thematicLayers.alert.setStyle(countyStyle);
+        refreshCountyLayer();
         return getCountyAlert(feature.properties.codi_comarca);
       }
 
@@ -524,7 +570,7 @@
         requireBoundaryData();
         const affectedOnly = options.affectedOnly === true;
         return countyFeatures
-          .filter(feature => !affectedOnly || alertLevels.has(feature.properties.nom_comarca))
+          .filter(feature => !affectedOnly || getCountyAlertColor(feature.properties.nom_comarca))
           .map(feature => getCountyAlert(feature.properties.codi_comarca));
       }
 
@@ -534,7 +580,13 @@
         listMunicipalityStatuses,
         setCountyAlert,
         getCountyAlert,
-        listCountyAlerts
+        listCountyAlerts,
+        getESAlertList: () => esAlerts.map(alert => ({
+          ...alert,
+          counties: [alert.county],
+          affectedIncidentIds: [...alert.affectedIncidentIds]
+        })),
+        finalizeESAlert: finalizeEsAlert
       });
 
       async function loadBoundaryLayers() {
@@ -599,6 +651,9 @@
           status.hidden = true;
           status.classList.remove("error");
           enabledThematicLayers.forEach(layerName => thematicLayers[layerName]?.addTo(map));
+          document.getElementById("open-es-alert").disabled = false;
+          for (const incident of getActiveIncidents()) applyActiveEsAlertsToIncident(incident);
+          refreshIncidentList();
           return true;
         } catch (error) {
           console.error("No s’han pogut carregar els límits municipals i comarcals.", error);
@@ -608,6 +663,483 @@
           return false;
         }
       }
+
+      const esAlertCategories = {
+        flood: "pluges intenses i inundacions",
+        fire: "incendis forestals",
+        chemical: "accidents químics i núvols tòxics",
+        medical: "emergències sanitàries col·lectives"
+      };
+      const esAlertCategoryLabels = {
+        ...esAlertCategories,
+        manual: "altres / redacció manual"
+      };
+
+      function parseEsAlertMessages(markdown) {
+        const messages = Object.fromEntries(Object.keys(esAlertCategories).map(category => [category, []]));
+        let category = null;
+        let currentMessage = null;
+        let language = null;
+        for (const line of markdown.split(/\r?\n/)) {
+          const heading = /^\s*\d+\.\s+(.+?)\s*$/.exec(line);
+          if (heading) {
+            const normalizedHeading = normalizeAdministrativeName(heading[1]);
+            const matchedCategory = Object.entries(esAlertCategories)
+              .find(([, title]) => normalizedHeading.includes(normalizeAdministrativeName(title)));
+            if (matchedCategory) {
+              category = matchedCategory[0];
+              currentMessage = null;
+            } else if (category) {
+              currentMessage = { title: heading[1], ca: [], es: [] };
+              messages[category].push(currentMessage);
+            }
+            language = null;
+            continue;
+          }
+          const languageLabel = normalizeAdministrativeName(line);
+          if (languageLabel === "catala") {
+            language = currentMessage ? "ca" : null;
+            continue;
+          }
+          if (languageLabel === "castella") {
+            language = currentMessage ? "es" : null;
+            continue;
+          }
+          if (!line.trim()) {
+            language = null;
+            continue;
+          }
+          if (currentMessage && language) currentMessage[language].push(line.trim());
+        }
+        for (const categoryMessages of Object.values(messages)) {
+          for (let index = categoryMessages.length - 1; index >= 0; index -= 1) {
+            const message = categoryMessages[index];
+            message.ca = message.ca.join("\n").trim();
+            message.es = message.es.join("\n").trim();
+            if (!message.ca || !message.es) categoryMessages.splice(index, 1);
+          }
+        }
+        return messages;
+      }
+
+      function loadEsAlertMessages() {
+        if (!esAlertMessageCatalogPromise) {
+          esAlertMessageCatalogPromise = fetch("es-alert-messages.md")
+            .then(response => {
+              if (!response.ok) throw new Error(`No s’ha pogut llegir es-alert-messages.md (${response.status}).`);
+              return response.text();
+            })
+            .then(parseEsAlertMessages);
+        }
+        return esAlertMessageCatalogPromise;
+      }
+
+      function getIncidentCounty(incident) {
+        if (!boundaryDataLoaded) return null;
+        const locationParts = String(incident.location || "").split("·").map(part => part.trim()).filter(Boolean);
+        const locationCounty = locationParts.length > 1 ? locationParts[locationParts.length - 1] : "";
+        const countyFeature = countiesByName.get(normalizeAdministrativeName(locationCounty));
+        if (countyFeature) return countyFeature.properties.nom_comarca;
+        const municipality = municipalitiesByName.get(normalizeAdministrativeName(incident.shortLocation || ""));
+        return municipality ? municipality.properties.nom_comarca : null;
+      }
+
+      function getIncidentAlertCategory(incident) {
+        const type = normalizeIncidentType(incident.type);
+        if (type === "forestFire") return "fire";
+        if (type === "flood" || type === "rain") return "flood";
+        if (type === "chemical") return "chemical";
+        if (type === "medical") return "medical";
+        return "manual";
+      }
+
+      function suggestEsAlertCategory() {
+        const scores = new Map();
+        for (const incident of getActiveIncidents()) {
+          if (!selectedCounties.has(getIncidentCounty(incident))) continue;
+          const category = getIncidentAlertCategory(incident);
+          const score = scores.get(category) || { count: 0, risk: 0 };
+          score.count += 1;
+          score.risk += Number(incident.risk) || 0;
+          scores.set(category, score);
+        }
+        return [...scores].sort((a, b) =>
+          b[1].count - a[1].count || b[1].risk - a[1].risk || a[0].localeCompare(b[0])
+        )[0]?.[0] || "manual";
+      }
+
+      function replaceAffectedCounties(text, language) {
+        const counties = [...selectedCounties].join(", ");
+        const replacement = language === "ca"
+          ? `les comarques afectades: ${counties}`
+          : `las comarcas afectadas: ${counties}`;
+        return text.replace(/\bla zona afectada\b/gi, replacement);
+      }
+
+      function getAlertMessageText() {
+        const catalan = document.getElementById("es-alert-message-ca").value.trim();
+        const spanish = document.getElementById("es-alert-message-es").value.trim();
+        return catalan && spanish ? `${catalan}\n\n${spanish}` : "";
+      }
+
+      function updateEsAlertComposer() {
+        const selected = [...selectedCounties];
+        document.getElementById("es-alert-preview-counties").textContent = selected.length
+          ? `Comarques afectades: ${selected.join(", ")}`
+          : "Selecciona com a mínim una comarca al mapa.";
+        document.getElementById("es-alert-preview-message").textContent = getAlertMessageText() || "El missatge bilingüe apareixerà aquí.";
+        document.getElementById("send-es-alert").disabled = selected.length === 0;
+      }
+
+      function renderSelectedAlertCounties() {
+        const list = document.getElementById("es-alert-county-list");
+        const names = [...selectedCounties].sort((a, b) => a.localeCompare(b, "ca"));
+        document.getElementById("es-alert-county-count").textContent = String(names.length);
+        list.replaceChildren();
+        for (const county of names) {
+          const row = document.createElement("div");
+          row.className = "es-alert-county-chip";
+          const name = document.createElement("span");
+          name.textContent = county;
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.textContent = "Treu";
+          remove.setAttribute("aria-label", `Treu ${county} de la selecció`);
+          remove.addEventListener("click", () => toggleCountySelection(county));
+          row.append(name, remove);
+          list.append(row);
+        }
+        updateEsAlertComposer();
+      }
+
+      function applyEsAlertTemplate() {
+        const category = document.getElementById("es-alert-category").value;
+        const templateIndex = Number(document.getElementById("es-alert-template").value);
+        const templates = esAlertMessageCatalog;
+        if (!templates || category === "manual" || !Number.isInteger(templateIndex)) return;
+        const message = templates[category]?.[templateIndex];
+        if (!message) return;
+        document.getElementById("es-alert-message-ca").value = replaceAffectedCounties(message.ca, "ca");
+        document.getElementById("es-alert-message-es").value = replaceAffectedCounties(message.es, "es");
+        updateEsAlertComposer();
+      }
+
+      async function populateEsAlertTemplates(preferredCategory = null) {
+        const categorySelect = document.getElementById("es-alert-category");
+        const templateSelect = document.getElementById("es-alert-template");
+        const status = document.getElementById("es-alert-message-status");
+        if (preferredCategory) categorySelect.value = preferredCategory;
+        try {
+          const messages = await loadEsAlertMessages();
+          esAlertMessageCatalog = messages;
+          status.hidden = true;
+          templateSelect.replaceChildren();
+          const category = categorySelect.value;
+          const categoryMessages = messages[category] || [];
+          for (const [index, message] of categoryMessages.entries()) {
+            const option = document.createElement("option");
+            option.value = String(index);
+            option.textContent = message.title;
+            templateSelect.append(option);
+          }
+          templateSelect.disabled = categoryMessages.length === 0;
+          if (categoryMessages.length) {
+            const levelIndex = { low: 0, medium: 1, high: 2 }[document.getElementById("es-alert-level").value] || 0;
+            templateSelect.value = String(Math.min(levelIndex, categoryMessages.length - 1));
+            applyEsAlertTemplate();
+          } else {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "No hi ha cap plantilla per a aquest tipus; redacta els dos idiomes.";
+            templateSelect.append(option);
+            document.getElementById("es-alert-message-ca").value = "";
+            document.getElementById("es-alert-message-es").value = "";
+            updateEsAlertComposer();
+          }
+        } catch (error) {
+          console.error("No s’han pogut carregar les plantilles d’ES-Alert.", error);
+          status.textContent = "No s’ha pogut llegir el fitxer de missatges. Pots redactar els textos en català i castellà manualment.";
+          status.hidden = false;
+          templateSelect.replaceChildren();
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Plantilles no disponibles";
+          templateSelect.append(option);
+          templateSelect.disabled = true;
+        }
+      }
+
+      function getEsAlertCategoryLabel(category) {
+        return capitalizeWord(esAlertCategoryLabels[category] || esAlertCategoryLabels.manual);
+      }
+
+      function renderEsAlertRecords() {
+        const list = document.getElementById("es-alert-record-list");
+        list.replaceChildren();
+        const records = [...esAlerts].sort((a, b) => b.sentAt - a.sentAt);
+        for (const alert of records) {
+          const row = document.createElement("div");
+          row.className = `es-alert-record${selectedEsAlertId === alert.id ? " selected" : ""}`;
+          const heading = document.createElement("div");
+          heading.className = "es-alert-record-heading";
+          const title = document.createElement("span");
+          title.textContent = `${alert.levelLabel} · ${getEsAlertCategoryLabel(alert.category)}`;
+          const status = document.createElement("small");
+          status.textContent = alert.status === "active"
+            ? "Activa"
+            : alert.status === "replaced"
+              ? `Substituïda · ${alert.endedTime}`
+              : `Finalitzada · ${alert.endedTime}`;
+          heading.append(title, status);
+          const countyText = document.createElement("span");
+          countyText.textContent = alert.county;
+          const actions = document.createElement("div");
+          const select = document.createElement("button");
+          select.type = "button";
+          select.textContent = selectedEsAlertId === alert.id ? "Seleccionada" : "Selecciona";
+          select.addEventListener("click", () => {
+            selectedEsAlertId = alert.id;
+            renderEsAlertRecords();
+          });
+          actions.append(select);
+          if (alert.status === "active") {
+            const finish = document.createElement("button");
+            finish.type = "button";
+            finish.textContent = "Finalitza alerta";
+            finish.addEventListener("click", () => finalizeEsAlert(alert.id));
+            actions.append(finish);
+          }
+          row.append(heading, countyText, actions);
+          list.append(row);
+        }
+        const selectedAlert = esAlerts.find(alert => alert.id === selectedEsAlertId);
+        const detail = document.getElementById("es-alert-record-detail");
+        if (!selectedAlert) {
+          detail.textContent = "";
+        } else {
+          const status = selectedAlert.status === "active"
+            ? "Activa"
+            : selectedAlert.status === "replaced"
+              ? `Substituïda (${selectedAlert.endedTime})`
+              : `Finalitzada (${selectedAlert.endedTime})`;
+          detail.textContent = `Comarca: ${selectedAlert.county}\nNivell: ${selectedAlert.levelLabel}\nTipus: ${getEsAlertCategoryLabel(selectedAlert.category)}\nEnviada: ${selectedAlert.sentTime}\nEstat: ${status}\n\n${selectedAlert.message}`;
+        }
+        const activeCount = esAlerts.filter(alert => alert.status === "active").length;
+        document.getElementById("es-alert-active-count").textContent = String(activeCount);
+      }
+
+      function renderEsAlertTimeline() {
+        const timeline = document.getElementById("es-alert-timeline");
+        timeline.replaceChildren();
+        const events = esAlerts.flatMap(alert => [
+          {
+            time: alert.sentAt,
+            sequence: alert.sentSequence,
+            title: `Enviament · ${alert.levelLabel} · ${getEsAlertCategoryLabel(alert.category)}`,
+            text: `${alert.county} · ${alert.sentTime}`
+          },
+          ...(alert.endedAt === null ? [] : [{
+            time: alert.endedAt,
+            sequence: alert.endedSequence,
+            title: `${alert.status === "replaced" ? "Substitució" : "Finalització"} · ${alert.levelLabel} · ${getEsAlertCategoryLabel(alert.category)}`,
+            text: `${alert.county} · ${alert.endedTime}`
+          }])
+        ]).sort((a, b) => b.time - a.time || b.sequence - a.sequence);
+        for (const event of events) {
+          const row = document.createElement("div");
+          row.className = "es-alert-timeline-entry";
+          const title = document.createElement("strong");
+          title.textContent = event.title;
+          const text = document.createElement("span");
+          text.textContent = event.text;
+          row.append(title, text);
+          timeline.append(row);
+        }
+      }
+
+      function openEsAlertPanel(incident = null) {
+        if (incident && selectedCounties.size === 0) {
+          const county = getIncidentCounty(incident);
+          if (county) selectedCounties.add(county);
+        }
+        if (!enabledThematicLayers.has("alert")) setActiveLayer("alert");
+        renderSelectedAlertCounties();
+        renderEsAlertRecords();
+        renderEsAlertTimeline();
+        const dialog = document.getElementById("es-alert-dialog");
+        if (!dialog.open) dialog.showModal();
+        populateEsAlertTemplates(incident ? getIncidentAlertCategory(incident) : suggestEsAlertCategory());
+      }
+
+      function applyEsAlertToIncident(alert, incident) {
+        if (alert.status !== "active" || isIncidentResolved(incident)) return;
+        if (getIncidentCounty(incident) !== alert.county) return;
+        if (getIncidentAlertCategory(incident) !== alert.category) return;
+        alert.affectedIncidentIds = alert.affectedIncidentIds || [];
+        if (alert.affectedIncidentIds.includes(incident.id)) return;
+        alert.affectedIncidentIds.push(incident.id);
+
+        hydrateIncident(incident);
+        incident.esAlertReductionsByCategory = incident.esAlertReductionsByCategory || {};
+        const targetReduction = esAlertLevelDetails[alert.level].reduction;
+        const previousReduction = Number(incident.esAlertReductionsByCategory[alert.category]) || 0;
+        const additionalReduction = Math.max(0, targetReduction - previousReduction);
+        if (additionalReduction === 0) return;
+        incident.esAlertReductionsByCategory[alert.category] = targetReduction;
+        incident.risk = Math.max(0, (Number(incident.risk) || 0) - additionalReduction);
+        const severity = getSeverityFromRisk(incident.risk);
+        incident.severity = severity.severity;
+        incident.level = severity.level;
+        incident.update = `ES-Alert de nivell ${alert.levelLabel} enviada a ${alert.county}. Gravetat actualitzada a ${incident.severity}.`;
+        incident.history.unshift({
+          time: alert.sentTime,
+          text: `${incident.update} Reducció de risc aplicada: ${additionalReduction} punts.`
+        });
+        refreshIncidentMarker(incident);
+        if (selectedId === incident.id) renderDetail(incident);
+      }
+
+      function applyEsAlertReduction(alert) {
+        alert.affectedIncidentIds = [];
+        for (const incident of getActiveIncidents()) applyEsAlertToIncident(alert, incident);
+        refreshIncidentList();
+      }
+
+      function applyActiveEsAlertsToIncident(incident) {
+        for (const alert of esAlerts) {
+          if (alert.status === "active") applyEsAlertToIncident(alert, incident);
+        }
+      }
+
+      function sendEsAlert() {
+        const counties = [...selectedCounties];
+        const level = document.getElementById("es-alert-level").value;
+        const category = document.getElementById("es-alert-category").value;
+        const catalan = document.getElementById("es-alert-message-ca").value.trim();
+        const spanish = document.getElementById("es-alert-message-es").value.trim();
+        const error = document.getElementById("es-alert-form-error");
+        if (!counties.length || !esAlertLevelDetails[level] || !esAlertCategoryLabels[category] || !catalan || !spanish) {
+          error.textContent = "Cal seleccionar com a mínim una comarca i proporcionar el missatge en català i castellà.";
+          error.hidden = false;
+          return;
+        }
+        error.hidden = true;
+        const sentAt = simulation.gameTime;
+        const sentTime = formatSimulationClock();
+        const replacedAlerts = esAlerts.filter(alert =>
+          alert.status === "active" && counties.includes(alert.county)
+        );
+        for (const alert of replacedAlerts) endEsAlert(alert, "replaced", sentAt, sentTime);
+
+        const createdAlerts = counties.map(county => ({
+          id: `ES-${Date.now()}-${nextEsAlertSequence++}`,
+          county,
+          level,
+          levelLabel: esAlertLevelDetails[level].label,
+          category,
+          messageCatalan: catalan,
+          messageSpanish: spanish,
+          message: `${catalan}\n\n${spanish}`,
+          sentAt,
+          sentSequence: nextEsAlertEventSequence++,
+          sentTime,
+          status: "active",
+          endedAt: null,
+          endedTime: null,
+          affectedIncidentIds: []
+        }));
+        esAlerts.unshift(...createdAlerts);
+        const [previewAlert] = createdAlerts;
+        selectedEsAlertId = previewAlert.id;
+        for (const alert of createdAlerts) applyEsAlertReduction(alert);
+        refreshCountyLayer();
+        renderEsAlertRecords();
+        renderEsAlertTimeline();
+        document.getElementById("es-alert-dialog").close();
+        openEsAlertPreview(previewAlert);
+      }
+
+      function endEsAlert(alert, status, endedAt = simulation.gameTime, endedTime = formatSimulationClock()) {
+        alert.status = status;
+        alert.endedAt = endedAt;
+        alert.endedSequence = nextEsAlertEventSequence++;
+        alert.endedTime = endedTime;
+        for (const incidentId of alert.affectedIncidentIds) {
+          const incident = incidents.find(item => item.id === incidentId);
+          if (!incident) continue;
+          incident.history.unshift({
+            time: alert.endedTime,
+            text: `ES-Alert ${alert.id} ${status === "replaced" ? "substituïda" : "finalitzada"} a ${alert.county}. La gravetat de l’emergència no s’ha restaurat.`
+          });
+          if (selectedId === incident.id) renderDetail(incident);
+        }
+      }
+
+      function finalizeEsAlert(id) {
+        const alert = esAlerts.find(item => item.id === id);
+        if (!alert || alert.status !== "active") return;
+        endEsAlert(alert, "ended");
+        refreshCountyLayer();
+        renderEsAlertRecords();
+        renderEsAlertTimeline();
+      }
+
+      function openEsAlertPreview(alert) {
+        const dialog = document.getElementById("es-alert-phone-dialog");
+        document.getElementById("es-alert-phone-level").textContent = `ES-Alert · Nivell ${alert.levelLabel}`;
+        document.getElementById("es-alert-phone-counties").textContent = `Comarca afectada: ${alert.county}`;
+        document.getElementById("es-alert-phone-message").textContent = alert.message;
+        const audioStatus = document.getElementById("es-alert-audio-status");
+        audioStatus.textContent = "Reproduint el so d’ES-Alert en bucle.";
+        dialog.showModal();
+        let audio;
+        try {
+          audio = new Audio("sounds/es-alert-sound.mp3");
+          esAlertPreviewAudio = audio;
+          audio.loop = true;
+          const playback = audio.play();
+          if (playback) {
+            playback.catch(error => {
+              if (esAlertPreviewAudio !== audio || !dialog.open) return;
+              console.warn("No s’ha pogut reproduir el so d’ES-Alert.", error);
+              audioStatus.textContent = "El navegador no ha permès reproduir el so. L’alerta continua activa.";
+            });
+          }
+        } catch (error) {
+          if ((audio && esAlertPreviewAudio !== audio) || !dialog.open) return;
+          console.warn("No s’ha pogut iniciar el so d’ES-Alert.", error);
+          audioStatus.textContent = "El navegador no ha permès reproduir el so. L’alerta continua activa.";
+        }
+      }
+
+      function stopEsAlertPreviewAudio() {
+        if (!esAlertPreviewAudio) return;
+        esAlertPreviewAudio.pause();
+        esAlertPreviewAudio.currentTime = 0;
+        esAlertPreviewAudio.removeAttribute("src");
+        esAlertPreviewAudio.load();
+        esAlertPreviewAudio = null;
+      }
+
+      document.getElementById("open-es-alert").addEventListener("click", () => openEsAlertPanel());
+      document.getElementById("close-es-alert").addEventListener("click", () => document.getElementById("es-alert-dialog").close());
+      document.getElementById("cancel-es-alert").addEventListener("click", () => document.getElementById("es-alert-dialog").close());
+      document.getElementById("es-alert-form").addEventListener("submit", event => {
+        event.preventDefault();
+        sendEsAlert();
+      });
+      document.getElementById("es-alert-level").addEventListener("change", () => populateEsAlertTemplates());
+      document.getElementById("es-alert-category").addEventListener("change", () => populateEsAlertTemplates());
+      document.getElementById("es-alert-template").addEventListener("change", applyEsAlertTemplate);
+      document.getElementById("es-alert-message-ca").addEventListener("input", updateEsAlertComposer);
+      document.getElementById("es-alert-message-es").addEventListener("input", updateEsAlertComposer);
+      const esAlertPhoneDialog = document.getElementById("es-alert-phone-dialog");
+      document.getElementById("close-es-alert-preview").addEventListener("click", () => {
+        stopEsAlertPreviewAudio();
+        esAlertPhoneDialog.close();
+      });
+      esAlertPhoneDialog.addEventListener("cancel", stopEsAlertPreviewAudio);
+      esAlertPhoneDialog.addEventListener("close", stopEsAlertPreviewAudio);
 
       function markerIcon(incident, selected) {
         const color = incident.level === "critical" ? "#f05252"
@@ -650,6 +1182,12 @@
             renderRadar();
           }
         }
+        if (layerName === "alert") {
+          const alertButton = document.getElementById("open-es-alert");
+          alertButton.hidden = isEnabled;
+          alertButton.disabled = !boundaryDataLoaded;
+          refreshCountyLayer();
+        }
         renderMapLegend();
       }
 
@@ -657,10 +1195,11 @@
         const legends = {
           alert: `
             <span class="map-legend-caption">ES-Alert per comarques</span>
-            <span class="map-legend-item"><span class="legend-dot alert-yellow"></span> Groc</span>
-            <span class="map-legend-item"><span class="legend-dot alert-orange"></span> Taronja</span>
-            <span class="map-legend-item"><span class="legend-dot alert-red"></span> Vermell</span>
-            <span class="map-legend-item"><span class="legend-dot alert-none"></span> Sense avís</span>`,
+            <span class="map-legend-item"><span class="legend-dot alert-yellow"></span> Baix</span>
+            <span class="map-legend-item"><span class="legend-dot alert-orange"></span> Mitjà</span>
+            <span class="map-legend-item"><span class="legend-dot alert-red"></span> Alt</span>
+            <span class="map-legend-item"><span class="legend-dot alert-none"></span> Sense alerta</span>
+            <span class="map-legend-item"><span class="legend-dot alert-selected"></span> Selecció actual</span>`,
           radar: `
             <span class="map-legend-caption">Radar de precipitació · simulació</span>
             <span class="map-legend-item"><span class="legend-dot rain-light"></span> Feble</span>
@@ -817,6 +1356,7 @@
           setActiveLayer(button.dataset.layer);
         });
       });
+      document.getElementById("open-es-alert").hidden = true;
       document.addEventListener("click", event => {
         if (!event.target.closest(".map-toolbar")) {
           layerMenu.hidden = true;
@@ -1132,7 +1672,7 @@
           <button class="action-button primary" data-action="assign" type="button">Assignar recursos</button>
           <button class="action-button" data-action="observe" type="button">Registrar observació</button>
           <button class="action-button" data-action="control" type="button">Marcar controlat</button>
-          <button class="action-button" data-action="es-alert" type="button" title="Funcionalitat pendent de configuració" disabled>Enviar ES-ALERT</button>
+          <button class="action-button" data-action="es-alert" type="button">Enviar ES-Alert</button>
         `;
 
         document.getElementById("detail-title").textContent = currentIncident.type;
@@ -1179,12 +1719,12 @@
         detailPanel.querySelectorAll(".action-button").forEach(button => {
           const action = button.dataset.action;
           button.disabled = isIncidentResolved(currentIncident) ||
-            action === "es-alert" ||
             (action === "control" && currentIncident.state === "Controlat");
           button.addEventListener("click", () => {
             if (action === "assign") assignIncidentResources(currentIncident.id);
             else if (action === "observe") addIncidentObservation(currentIncident.id);
             else if (action === "control") setIncidentState(currentIncident.id, "Controlat");
+            else if (action === "es-alert") openEsAlertPanel(currentIncident);
           });
         });
       }
@@ -1424,7 +1964,6 @@
         const id = incident.id || `INC-${Date.now().toString().slice(-6)}`;
         incident.id = id;
         incidents.unshift(incident);
-        refreshIncidentList();
         const marker = L.marker(incident.coordinates, { icon: markerIcon(incident, false) }).addTo(map);
         marker.bindTooltip(`${incident.type} · ${incident.shortLocation}`, { direction: "top", offset: [0, -22] });
         marker.on("click", () => {
@@ -1432,6 +1971,8 @@
           document.querySelector(`[data-id="${incident.id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         });
         markers.set(incident.id, marker);
+        applyActiveEsAlertsToIncident(incident);
+        refreshIncidentList();
         return incident;
       }
 
