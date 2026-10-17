@@ -1495,13 +1495,22 @@
 
       function generateScenarioIncident() {
         const templates = [
-          { type: "Incendi forestal", description: "Foc de vegetació amb propagació afavorida per les condicions locals.", typeMeta: incidentTypeCatalog.forestFire },
-          { type: "Accident de trànsit greu", description: "Col·lisió amb afectació a la circulació i necessitat d’atenció als implicats.", typeMeta: incidentTypeCatalog.traffic },
-          { type: "Accident químic", description: "Possible fuita de material perillós amb risc de confinament preventiu.", typeMeta: incidentTypeCatalog.chemical },
-          { type: "Emergència sanitària col·lectiva", description: "Diverses persones afectades amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical }
+          { type: "Incendi forestal", description: "Foc de vegetació amb propagació afavorida per les condicions locals.", typeMeta: incidentTypeCatalog.forestFire, weight: 1 },
+          { type: "Accident de trànsit greu", description: "Col·lisió amb afectació a la circulació i necessitat d’atenció als implicats.", typeMeta: incidentTypeCatalog.traffic, weight: 1 },
+          { type: "Accident químic", description: "Possible fuita de material perillós amb risc de confinament preventiu.", typeMeta: incidentTypeCatalog.chemical, weight: 1 },
+          { type: "Emergència sanitària col·lectiva", description: "Diverses persones afectades amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical, weight: 0.05 }
         ];
         const random = weatherModel.random || Math.random;
-        const template = templates[Math.floor(random() * templates.length)];
+        const totalTemplateWeight = templates.reduce((total, candidate) => total + candidate.weight, 0);
+        let templateSelection = random() * totalTemplateWeight;
+        let template = templates[templates.length - 1];
+        for (const candidate of templates) {
+          templateSelection -= candidate.weight;
+          if (templateSelection < 0) {
+            template = candidate;
+            break;
+          }
+        }
         const isPopulationSensitive = template.typeMeta.id === "forestFire" || template.typeMeta.id === "chemical";
         const availableMunicipalities = scenarioMunicipalityLocations.length
           ? scenarioMunicipalityLocations

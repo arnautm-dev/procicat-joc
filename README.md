@@ -60,6 +60,8 @@ Aquestes dades es carreguen a la memòria en iniciar l’aplicació i es renderi
 
 La simulació genera incidències als municipis disponibles: inundacions, tempestes, accidents de trànsit i emergències sanitàries tenen el mateix pes per municipi. Els incendis i accidents químics ponderen la selecció amb factors relatius de població aproximats per als principals nuclis urbans; la resta de municipis continuen sent candidats amb un pes base.
 
+Entre els tipus que escull el generador automàtic d’escenaris, les emergències sanitàries col·lectives són molt poc freqüents: tenen un pes de 0,05, en comparació amb el pes 1 dels altres tres tipus, cosa que representa aproximadament un 1,6% d’aquestes incidències.
+
 ## Càrrega de límits administratius
 
 Un dels punts més importants del projecte és la càrrega de dades geogràfiques reals. `loadBoundaryLayers()` fa dos `fetch` simultanis a una base remota de geometries on hi ha:
