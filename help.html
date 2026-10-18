@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ca" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROCICOORD - Centre de Coordinació d'Emergències | Ajuda i Contacte</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            darker: '#0A1017',
+                            dark: '#0D141C',
+                            card: '#141E28',
+                            hover: '#1B2836',
+                            border: '#243447',
+                            accent: '#10B981',
+                            accentHover: '#059669',
+                            critical: '#EF4444',
+                            warning: '#F97316',
+                            info: '#3B82F6',
+                            textMuted: '#9CA3AF'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Personalització d'scrollbars estil panell operatiu */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D141C;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #243447;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #37495E;
+        }
+        
+        .tab-btn.active {
+            background-color: #1B2836;
+            border-left: 3px solid #10B981;
+            color: #FFFFFF;
+        }
+    </style>
+</head>
+<body class="bg-brand-dark text-slate-100 font-sans min-h-screen flex flex-col overflow-x-hidden antialiased selection:bg-brand-accent selection:text-white">
+
+    <!-- TOP BAR / CAPÇALERA SUPERIOR -->
+    <header class="bg-brand-darker border-b border-brand-border px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-50">
+        <!-- Brand / Escut -->
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-md bg-brand-accent/10 border border-brand-accent/40 flex items-center justify-center text-brand-accent">
+                <i class="fa-solid font-bold fa-shield-halved text-lg"></i>
+            </div>
+            <div>
+                <div class="font-bold text-sm tracking-wider flex items-center gap-2">
+                    PROCICOORD
+                    <span class="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-brand-border text-brand-textMuted">MANUAL I SUPORT</span>
+                </div>
+                <div class="text-xs text-brand-textMuted">Centre de coordinació d'emergències</div>
+            </div>
+        </div>
+
+        <!-- Indicador d'Estat i Rols -->
+        <div class="flex items-center gap-4 text-xs">
+            <div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-emerald-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-medium tracking-wide">SISTEMA OPERATIU</span>
+            </div>
+
+            <!-- Botó Reprendre Joc -->
+            <button onclick="showToast('Retornant a la sala de coordinació de simulació...')" class="bg-brand-accent hover:bg-brand-accentHover text-slate-950 font-bold px-3 py-1.5 rounded text-xs transition flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-play text-[10px]"></i>
+                REPRENDRE JOC
+            </button>
+
+            <!-- Vel. i Rol Operador -->
+            <div class="hidden md:flex items-center gap-2 border-l border-brand-border pl-4">
+                <div class="flex items-center gap-1.5 bg-brand-card px-2.5 py-1 rounded border border-brand-border">
+                    <span class="w-5 h-5 rounded-full bg-brand-border text-[10px] font-bold flex items-center justify-center text-slate-300">OP</span>
+                    <span class="text-slate-200 text-xs">Operador de torn</span>
+                </div>
+                <div class="text-brand-textMuted font-mono text-xs">DIUMENGE, 15:45</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- CONTINGUT PRINCIPAL (LAYOUT 3 COLUMNES / DASHBOARD) -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+
+        <!-- PANELL LATERAL ESQUERRA: Navegació i Cerca -->
+        <aside class="w-full md:w-64 lg:w-72 bg-brand-darker border-r border-brand-border flex-shrink-0 p-3 flex flex-col gap-3">
+            
+            <!-- Cercador -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-brand-textMuted text-xs"></i>
+                <input type="text" id="searchInput" onkeyup="filterTopics()" placeholder="Cerca per tema o protocol..." class="w-full bg-brand-card border border-brand-border rounded py-1.5 pl-8 pr-3 text-xs text-slate-200 placeholder-brand-textMuted focus:outline-none focus:border-brand-accent transition">
+            </div>
+
+            <!-- Titol Secció -->
+            <div class="text-[11px] font-semibold text-brand-textMuted uppercase tracking-wider px-2 pt-1">
+                SALA DE COORDINACIÓ
+            </div>
+
+            <!-- Navegació Seccions -->
+            <nav class="flex flex-col gap-1 text-xs text-slate-300" id="navTopics">
+                <button onclick="switchTab('guiarapida')" id="tab-guiarapida" class="tab-btn active text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-compass text-brand-accent w-4 text-center"></i>
+                        Guia Ràpida de la Interfície
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-40"></i>
+                </button>
+
+                <button onclick="switchTab('incidencies')" id="tab-incidencies" class="tab-btn text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-triangle-exclamation text-brand-warning w-4 text-center"></i>
+                        Gestió d'Incidències
+                    </span>
+                    <span class="bg-brand-critical/20 text-brand-critical text-[10px] font-bold px-1.5 py-0.5 rounded">3 Nivells</span>
+                </button>
+
+                <button onclick="switchTab('serveis')" id="tab-serveis" class="tab-btn text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-truck-medical text-brand-info w-4 text-center"></i>
+                        Mobilització de Recorreguts
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-40"></i>
+                </button>
+
+                <button onclick="switchTab('esalert')" id="tab-esalert" class="tab-btn text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-bullhorn text-brand-accent w-4 text-center"></i>
+                        Protocol ES-Alert
+                    </span>
+                    <span class="bg-brand-accent/20 text-brand-accent text-[10px] font-bold px-1.5 py-0.5 rounded">Clau</span>
+                </button>
+
+                <button onclick="switchTab('faq')" id="tab-faq" class="tab-btn text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-circle-question text-purple-400 w-4 text-center"></i>
+                        Preguntes Freqüents (FAQ)
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-40"></i>
+                </button>
+
+                <button onclick="switchTab('contacte')" id="tab-contacte" class="tab-btn text-left px-3 py-2 rounded transition flex items-center justify-between hover:bg-brand-hover">
+                    <span class="flex items-center gap-2.5">
+                        <i class="fa-solid fa-headset text-slate-300 w-4 text-center"></i>
+                        Suport Tècnic / Report Bugs
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-40"></i>
+                </button>
+            </nav>
+
+            <!-- Mini Banner d'Estat del Sistema -->
+            <div class="mt-auto bg-brand-card border border-brand-border rounded p-3 text-xs flex flex-col gap-1.5">
+                <div class="text-brand-textMuted text-[10px] uppercase font-bold tracking-wider">ESTAT DELS SERVIDORS</div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Simulador de Mapa:</span>
+                    <span class="text-brand-accent font-semibold">100% Online</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Servidor d'Avisos 112:</span>
+                    <span class="text-brand-accent font-semibold">Actiu</span>
+                </div>
+                <div class="w-full bg-brand-darker h-1.5 rounded-full overflow-hidden mt-1">
+                    <div class="bg-brand-accent h-full w-full"></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ÁREA CENTRAL DE CONTINGUT PRINCIPAL -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-6 bg-brand-dark space-y-6">
+
+            <!-- SECCIÓ 1: GUIA RÀPIDA DE LA INTERFÍCIE -->
+            <section id="sec-guiarapida" class="space-y-4">
+                <div class="border-b border-brand-border pb-3 flex items-center justify-between">
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-compass text-brand-accent"></i> Guia Ràpida del Centre de Control
+                        </h1>
+                        <p class="text-xs text-brand-textMuted mt-0.5">Mapeig i descripció dels elements de la interfície d'operador de PROCICOORD.</p>
+                    </div>
+                    <span class="bg-brand-card border border-brand-border text-xs px-2.5 py-1 rounded text-slate-300">v1.4.2-PROD</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Targeta 1 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg p-4 space-y-2">
+                        <div class="flex items-center gap-2 text-brand-accent font-semibold text-sm">
+                            <span class="w-6 h-6 rounded bg-brand-accent/20 border border-brand-accent/30 text-brand-accent flex items-center justify-center text-xs">1</span>
+                            Panell Lateral Esquerre: Emergències actives
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Muestra la llista cronològica d'incidents informats pel sistema central 112. Pots filtrar per tipus o municipi (ex. <span class="text-slate-100 font-mono">Torres de Segre</span>, <span class="text-slate-100 font-mono">Vilanova de Bellpuig</span>) i ordenar per severitat de la crisi.
+                        </p>
+                        <div class="flex gap-2 mt-2">
+                            <span class="bg-brand-critical/10 border border-brand-critical/30 text-brand-critical text-[10px] px-2 py-0.5 rounded uppercase font-bold">● Crítica</span>
+                            <span class="bg-brand-warning/10 border border-brand-warning/30 text-brand-warning text-[10px] px-2 py-0.5 rounded uppercase font-bold">● Important</span>
+                        </div>
+                    </div>
+
+                    <!-- Targeta 2 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg p-4 space-y-2">
+                        <div class="flex items-center gap-2 text-brand-accent font-semibold text-sm">
+                            <span class="w-6 h-6 rounded bg-brand-accent/20 border border-brand-accent/30 text-brand-accent flex items-center justify-center text-xs">2</span>
+                            Mapa Central de Termografia i Afectació
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Representació cartogràfica interactiva amb capes meteorològiques, pluviometria i punts d'alerta. Permet avançar o reproduir la predicció d'afectació en franges de +1h, +2h, +3h.
+                        </p>
+                        <div class="text-[11px] text-brand-textMuted bg-brand-darker p-2 rounded border border-brand-border font-mono">
+                            Eines: [ Capes ] | [ ES-Alert 1 ] | [ Reproduir Simulació ]
+                        </div>
+                    </div>
+
+                    <!-- Targeta 3 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg p-4 space-y-2">
+                        <div class="flex items-center gap-2 text-brand-accent font-semibold text-sm">
+                            <span class="w-6 h-6 rounded bg-brand-accent/20 border border-brand-accent/30 text-brand-accent flex items-center justify-center text-xs">3</span>
+                            Fitxa d'Incidència (Panell Dret)
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            Aquesta fitxa conté la informació detallada del municipi, pluviometria (ex. <span class="text-slate-100 font-mono">21.8 mm/h</span>), nivell de risc a la població i l'històric d'activitat recent. Des d'aquí es gestionen les accions executives.
+                        </p>
+                    </div>
+
+                    <!-- Targeta 4 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg p-4 space-y-2">
+                        <div class="flex items-center gap-2 text-brand-accent font-semibold text-sm">
+                            <span class="w-6 h-6 rounded bg-brand-accent/20 border border-brand-accent/30 text-brand-accent flex items-center justify-center text-xs">4</span>
+                            Accions Executives Principals
+                        </div>
+                        <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
+                            <li><strong class="text-brand-accent">Assignar recursos:</strong> Desplega Bombers, Policia o SEM.</li>
+                            <li><strong class="text-slate-100">Registrar observació:</strong> Afegeix notes de camp.</li>
+                            <li><strong class="text-slate-100">Enviar ES-Alert:</strong> Dispara avís d'emergència als mòbils.</li>
+                            <li><strong class="text-slate-100">Marcar controlat:</strong> Desactiva la urgència.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓ 2: GESTIÓ D'INCIDÈNCIES -->
+            <section id="sec-incidencies" class="space-y-4 hidden">
+                <div class="border-b border-brand-border pb-3">
+                    <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-brand-warning"></i> Nivells de Severitat d'Incidències
+                    </h1>
+                    <p class="text-xs text-brand-textMuted mt-0.5">Com prioritzar i actuar davant de les emergències a la xarxa municipal.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Nivell Crític -->
+                    <div class="bg-brand-card border-l-4 border-brand-critical rounded-r-lg p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="bg-brand-critical text-white text-xs font-bold px-2 py-0.5 rounded">CRÍTICA</span>
+                            <span class="text-xs text-brand-textMuted">Prioritat Alta (Immediata)</span>
+                        </div>
+                        <h2 class="text-sm font-bold text-slate-100">Risc vital directament imminent per a la població</h2>
+                        <p class="text-xs text-slate-300">
+                            Exemples: Inundació urbana de nivell alt amb acumulació >25 mm/h, incendis forestals propers a nuclis urbans, tall general d'infraestructures crítiques.
+                        </p>
+                        <div class="text-xs bg-brand-darker p-2 rounded text-slate-400">
+                            <strong>Protocol recomanat:</strong> Assignar recursos de rescat ràpid de manera immediata + Avaluar l'enviament de missatge ES-Alert al municipi afectat.
+                        </div>
+                    </div>
+
+                    <!-- Nivell Important -->
+                    <div class="bg-brand-card border-l-4 border-brand-warning rounded-r-lg p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="bg-brand-warning text-slate-950 text-xs font-bold px-2 py-0.5 rounded">IMPORTANT</span>
+                            <span class="text-xs text-brand-textMuted">Prioritat Mitjana</span>
+                        </div>
+                        <h2 class="text-sm font-bold text-slate-100">Dany a béns materials o risc moderat de propagació</h2>
+                        <p class="text-xs text-slate-300">
+                            Exemples: Creixement de llera de riu en fase d'alerta, esfondrament de carreteres comarcals o talls elèctrics massius.
+                        </p>
+                        <div class="text-xs bg-brand-darker p-2 rounded text-slate-400">
+                            <strong>Protocol recomanat:</strong> Desplegar unitats de control, coordinar-se amb protecció civil local i monitorar l'evolució al mapa meteorològic.
+                        </div>
+                    </div>
+
+                    <!-- Nivell Controlat -->
+                    <div class="bg-brand-card border-l-4 border-brand-accent rounded-r-lg p-4 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="bg-brand-accent text-slate-950 text-xs font-bold px-2 py-0.5 rounded">CONTROLAT</span>
+                            <span class="text-xs text-brand-textMuted">Fase de finalització</span>
+                        </div>
+                        <h2 class="text-sm font-bold text-slate-100">Emergència sota supervisió sense risc actiu de creixement</h2>
+                        <p class="text-xs text-slate-300">
+                            Les unitats mobilitzades han aconseguit estabilitzar la zona. Es requereix tasca de neteja o avaluació de danys.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓ 3: MOBILITZACIÓ DE SERVEIS -->
+            <section id="sec-serveis" class="space-y-4 hidden">
+                <div class="border-b border-brand-border pb-3">
+                    <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-truck-medical text-brand-info"></i> Organismes i Serveis Mobilitzables
+                    </h1>
+                    <p class="text-xs text-brand-textMuted mt-0.5">Especialització i temps de resposta dels equips d'intervenció.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-brand-card border border-brand-border p-4 rounded-lg flex items-start gap-3">
+                        <div class="w-10 h-10 rounded bg-red-950/60 border border-red-500/40 text-red-500 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                            <i class="fa-solid fa-fire"></i>
+                        </div>
+                        <div class="space-y-1">
+                            <h2 class="text-sm font-bold text-slate-100">Bombers de la Generalitat</h2>
+                            <p class="text-xs text-slate-300">Especialistes en rescats aquàtics, extenció d'incendis, buidatge d'aigua en inundacions i intervenció estructural.</p>
+                            <span class="inline-block text-[10px] bg-red-900/30 text-red-400 border border-red-800 px-2 py-0.5 rounded">Eficàcia alta en Inundacions / Incendis</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card border border-brand-border p-4 rounded-lg flex items-start gap-3">
+                        <div class="w-10 h-10 rounded bg-blue-950/60 border border-blue-500/40 text-blue-400 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                            <i class="fa-solid fa-user-shield"></i>
+                        </div>
+                        <div class="space-y-1">
+                            <h2 class="text-sm font-bold text-slate-100">Mossos d'Esquadra / Policia Local</h2>
+                            <p class="text-xs text-slate-300">Gestió del trànsit, tall de carreteres anegades, evacuacions ordenades i perimetratge de zones perilloses.</p>
+                            <span class="inline-block text-[10px] bg-blue-900/30 text-blue-400 border border-blue-800 px-2 py-0.5 rounded">Control de perímetres i evacs</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card border border-brand-border p-4 rounded-lg flex items-start gap-3">
+                        <div class="w-10 h-10 rounded bg-amber-950/60 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                            <i class="fa-solid fa-kit-medical"></i>
+                        </div>
+                        <div class="space-y-1">
+                            <h2 class="text-sm font-bold text-slate-100">SEM (Sistema d'Emergències Mèdiques)</h2>
+                            <p class="text-xs text-slate-300">Atenció sanitària in situ, assistència a ferits, desplegament d'hospitals de campanya i transport d'urgència.</p>
+                            <span class="inline-block text-[10px] bg-amber-900/30 text-amber-400 border border-amber-800 px-2 py-0.5 rounded">Atenció mèdica immediata</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-card border border-brand-border p-4 rounded-lg flex items-start gap-3">
+                        <div class="w-10 h-10 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                            <i class="fa-solid fa-hands-holding-circle"></i>
+                        </div>
+                        <div class="space-y-1">
+                            <h2 class="text-sm font-bold text-slate-100">Voluntaris de Protecció Civil</h2>
+                            <p class="text-xs text-slate-300">Suport logístic, informació directa a la ciutadania, distribució de subministraments i suport en albergs temporals.</p>
+                            <span class="inline-block text-[10px] bg-emerald-900/30 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded">Suport logístic i de població</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓ 4: PROTOCOL ES-ALERT -->
+            <section id="sec-esalert" class="space-y-4 hidden">
+                <div class="border-b border-brand-border pb-3">
+                    <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-brand-accent"></i> Protocol d'Enviament ES-Alert
+                    </h1>
+                    <p class="text-xs text-brand-textMuted mt-0.5">Avisos d'emergència massius als dispositius mòbils de la població.</p>
+                </div>
+
+                <div class="bg-brand-card border border-brand-border p-5 rounded-lg space-y-4">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full bg-brand-critical animate-ping"></span>
+                        <h2 class="text-base font-bold text-slate-100">Quan s'ha d'activar una alerta ES-Alert?</h2>
+                    </div>
+
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        El sistema <strong class="text-brand-accent">ES-Alert</strong> permet enviar un missatge sonor d'alta prioritat a tots els telèfons intel·ligents situats dins la cel·la de cobertura d'un municipi en risc. Aquest botó no s'ha d'utilitzar sense justificació clara.
+                    </p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div class="bg-brand-darker p-3 rounded border border-brand-border">
+                            <div class="text-brand-accent font-bold mb-1 flex items-center gap-1.5">
+                                <i class="fa-solid fa-check"></i> Condicions d'Ús Recomanat
+                            </div>
+                            <ul class="list-disc list-inside space-y-1 text-slate-300">
+                                <li>Inundació urbana imminent (>20 mm/h continuats).</li>
+                                <li>Risc de desbordament de riu o riera amb població en zona inundable.</li>
+                                <li>Necessitat de confinament o evacuació immediata.</li>
+                                <li>Nivell de Risc de la població superior al 75%.</li>
+                            </ul>
+                        </div>
+
+                        <div class="bg-brand-darker p-3 rounded border border-brand-border">
+                            <div class="text-brand-critical font-bold mb-1 flex items-center gap-1.5">
+                                <i class="fa-solid fa-xmark"></i> Penalitzacions en el Joc
+                            </div>
+                            <ul class="list-disc list-inside space-y-1 text-slate-300">
+                                <li>Llançar un ES-Alert en situacions no crítiques redueix la confidencialitat pública (-15% de punts de gestió).</li>
+                                <li>Saturació injustificada de línies de trànsit.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECCIÓ 5: PREGUNTES FREQÜENTS (FAQ) -->
+            <section id="sec-faq" class="space-y-4 hidden">
+                <div class="border-b border-brand-border pb-3">
+                    <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-question text-purple-400"></i> Preguntes Freqüents (FAQ)
+                    </h1>
+                    <p class="text-xs text-brand-textMuted mt-0.5">Respostes ràpides a dubtes habituals de coordinació i mecàniques de joc.</p>
+                </div>
+
+                <div class="space-y-2" id="faqAccordion">
+
+                    <!-- FAQ ITEM 1 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg overflow-hidden">
+                        <button onclick="toggleFaq(1)" class="w-full p-3 text-left font-semibold text-xs text-slate-200 flex justify-between items-center hover:bg-brand-hover transition">
+                            <span>Com es calcula el percentatge de "Risc població"?</span>
+                            <i id="faq-icon-1" class="fa-solid fa-chevron-down text-brand-textMuted text-xs transition-transform"></i>
+                        </button>
+                        <div id="faq-content-1" class="hidden px-3 pb-3 text-xs text-slate-300 border-t border-brand-border/50 pt-2 bg-brand-darker/50">
+                            El risc es calcula creuant la densitat de població del municipi afectat amb la severitat de la pluja acumulada (mm) i el temps de resposta estimat dels serveis mobilitzats. Si supera el 80%, la situació passa a ser d'alta prioritat regional.
+                        </div>
+                    </div>
+
+                    <!-- FAQ ITEM 2 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg overflow-hidden">
+                        <button onclick="toggleFaq(2)" class="w-full p-3 text-left font-semibold text-xs text-slate-200 flex justify-between items-center hover:bg-brand-hover transition">
+                            <span>Què faig si no tinc serveis suficients a la meva comarca?</span>
+                            <i id="faq-icon-2" class="fa-solid fa-chevron-down text-brand-textMuted text-xs transition-transform"></i>
+                        </button>
+                        <div id="faq-content-2" class="hidden px-3 pb-3 text-xs text-slate-300 border-t border-brand-border/50 pt-2 bg-brand-darker/50">
+                            Pots demanar la coordinació d'unitats d'altres regions metropolitanes o aprovar la intervenció de Voluntaris de Protecció Civil com a suport temporal mentre les unitats principals arriben a la zona.
+                        </div>
+                    </div>
+
+                    <!-- FAQ ITEM 3 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg overflow-hidden">
+                        <button onclick="toggleFaq(3)" class="w-full p-3 text-left font-semibold text-xs text-slate-200 flex justify-between items-center hover:bg-brand-hover transition">
+                            <span>Com es guarda el progrés del torn de treball?</span>
+                            <i id="faq-icon-3" class="fa-solid fa-chevron-down text-brand-textMuted text-xs transition-transform"></i>
+                        </button>
+                        <div id="faq-content-3" class="hidden px-3 pb-3 text-xs text-slate-300 border-t border-brand-border/50 pt-2 bg-brand-darker/50">
+                            El sistema guarda automàticament cada canvi d'hora simulada (ex. 15:45). També pots desar manualment des del menú principal de configuració del simulador.
+                        </div>
+                    </div>
+
+                    <!-- FAQ ITEM 4 -->
+                    <div class="bg-brand-card border border-brand-border rounded-lg overflow-hidden">
+                        <button onclick="toggleFaq(4)" class="w-full p-3 text-left font-semibold text-xs text-slate-200 flex justify-between items-center hover:bg-brand-hover transition">
+                            <span>Es pot canviar la velocitat de la simulació de temps?</span>
+                            <i id="faq-icon-4" class="fa-solid fa-chevron-down text-brand-textMuted text-xs transition-transform"></i>
+                        </button>
+                        <div id="faq-content-4" class="hidden px-3 pb-3 text-xs text-slate-300 border-t border-brand-border/50 pt-2 bg-brand-darker/50">
+                            Sí, a la barra superior tens el selector de velocitat (1x, 2x, 5x, 10x) i el botó d'aturada o "PAUSA / REPRENDRE".
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- SECCIÓ 6: FORMULARI DE CONTACTE I BUG REPORT -->
+            <section id="sec-contacte" class="space-y-4 hidden">
+                <div class="border-b border-brand-border pb-3">
+                    <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                        <i class="fa-solid fa-headset text-brand-accent"></i> Suport Tècnic i Report d'Incidències del Joc
+                    </h1>
+                    <p class="text-xs text-brand-[#9CA3AF] text-brand-textMuted mt-0.5">Envia informació sobre errors, suggeriments de millora de mecaniques o problemes tècnics.</p>
+                </div>
+
+                <form onsubmit="handleFormSubmit(event)" class="bg-brand-card border border-brand-border p-5 rounded-lg space-y-4">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Nom Operador -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-slate-300">Nom de l'Operador / Usuari *</label>
+                            <input type="text" required placeholder="Ex. Operador_Lleida" class="w-full bg-brand-darker border border-brand-border rounded px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-accent transition">
+                        </div>
+
+                        <!-- Correu electrònic -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-slate-300">Correu Electrònic de Suport *</label>
+                            <input type="email" required placeholder="operador@procicoord.cat" class="w-full bg-brand-darker border border-brand-border rounded px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-accent transition">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Tipus de Consulta -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-slate-300">Tipus de Consulta *</label>
+                            <select required class="w-full bg-brand-darker border border-brand-border rounded px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-accent transition">
+                                <option value="">Selecciona una opció...</option>
+                                <option value="bug">Error tècnic / Bug en el Mapa</option>
+                                <option value="mechanic">Suggeriment de mecànica de simulació</option>
+                                <option value="data">Error en dades municipals / Pluviometria</option>
+                                <option value="other">Altra consulta de suport</option>
+                            </select>
+                        </div>
+
+                        <!-- Prioritat del report -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-semibold text-slate-300">Severitat del Bug</label>
+                            <select class="w-full bg-brand-darker border border-brand-border rounded px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-accent transition">
+                                <option value="low">Baixa (Estètica / Text)</option>
+                                <option value="medium">Mitjana (Mecànica secundària)</option>
+                                <option value="high">Crítica (Bloqueig de simulació)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Missatge -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-300">Descripció detallada del missatge o bug *</label>
+                        <textarea rows="4" required placeholder="Explica clarament què ha passat o quin suggeriment tens..." class="w-full bg-brand-darker border border-brand-border rounded px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-accent transition"></textarea>
+                    </div>
+
+                    <!-- Adjunt de fitxer / Captura -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-slate-300">Captura de pantalla o fitxer de registres (Opcional)</label>
+                        <input type="file" class="w-full text-xs text-brand-textMuted file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-brand-border file:text-slate-200 hover:file:bg-brand-hover cursor-pointer">
+                    </div>
+
+                    <!-- Botó Enviament -->
+                    <div class="pt-2 flex justify-end">
+                        <button type="submit" class="bg-brand-accent hover:bg-brand-accentHover text-slate-950 font-bold px-5 py-2 rounded text-xs transition flex items-center gap-2 shadow">
+                            <i class="fa-solid fa-paper-plane"></i>
+                            ENVIAR REPORT DE SUPORT
+                        </button>
+                    </div>
+
+                </form>
+            </section>
+
+        </main>
+
+        <!-- PANELL LATERAL DRET: FITXA D'ESTAT I COMUNITAT -->
+        <aside class="w-full md:w-72 bg-brand-darker border-l border-brand-border p-4 flex-shrink-0 flex flex-col gap-4">
+            
+            <!-- Fitxa Estat d'Assistència -->
+            <div class="bg-brand-card border border-brand-border rounded-lg p-3.5 space-y-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-brand-textMuted flex items-center justify-between">
+                    <span>CANAL D'ASSISTÈNCIA</span>
+                    <span class="w-2 h-2 rounded-full bg-brand-accent"></span>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="text-xs font-semibold text-slate-200">Suport al Desenvolupament</div>
+                    <p class="text-xs text-brand-textMuted leading-relaxed">
+                        PROCICOORD és una eina de simulació en constant evolució i ajust de balanç de dades de Protecció Civil.
+                    </p>
+                </div>
+
+                <div class="border-t border-brand-border pt-2 text-xs space-y-1.5">
+                    <div class="flex justify-between text-slate-300">
+                        <span>Versió actual:</span>
+                        <span class="font-mono text-brand-accent">v1.4.2</span>
+                    </div>
+                    <div class="flex justify-between text-slate-300">
+                        <span>Darrera actualització:</span>
+                        <span class="text-slate-400">Avui, 04:00h</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comunitat i Enllaços Directes -->
+            <div class="bg-brand-card border border-brand-border rounded-lg p-3.5 space-y-3">
+                <div class="text-[11px] font-bold uppercase tracking-wider text-brand-textMuted">
+                    XARXES I COMUNITAT
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <a href="javascript:void(0)" onclick="showToast('Obrint canal oficial de Discord...')" class="flex items-center gap-2.5 p-2 rounded bg-brand-darker border border-brand-border hover:border-brand-accent text-xs text-slate-200 transition">
+                        <i class="fa-brands fa-discord text-indigo-400 text-sm"></i>
+                        <span>Discord Oficial PROCICOORD</span>
+                    </a>
+
+                    <a href="javascript:void(0)" onclick="showToast('Descarregant darrer Changelog en PDF...')" class="flex items-center gap-2.5 p-2 rounded bg-brand-darker border border-brand-border hover:border-brand-accent text-xs text-slate-200 transition">
+                        <i class="fa-solid fa-file-lines text-brand-accent text-sm"></i>
+                        <span>Notes de la Versió (Changelog)</span>
+                    </a>
+
+                    <a href="javascript:void(0)" onclick="showToast('Obrint canal de suggeriments de la comunitat...')" class="flex items-center gap-2.5 p-2 rounded bg-brand-darker border border-brand-border hover:border-brand-accent text-xs text-slate-200 transition">
+                        <i class="fa-solid fa-comments text-amber-400 text-sm"></i>
+                        <span>Fòrum de suggeriments</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Avís d'Alerta Informativa -->
+            <div class="bg-amber-950/30 border border-amber-500/30 p-3 rounded-lg text-xs space-y-1">
+                <div class="text-amber-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Nota Operativa
+                </div>
+                <p class="text-amber-200/80 leading-relaxed text-[11px]">
+                    Aquest simulador utilitza patrons de dades basats en protocols reals del CECAT, però és d'ús exclusivament lúdic i educatiu.
+                </p>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <!-- TOAST / MISSATGE DE NOTIFICACIÓ -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-brand-card border border-brand-accent text-slate-100 text-xs px-4 py-3 rounded-lg shadow-xl opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2 z-50">
+        <i class="fa-solid fa-circle-check text-brand-accent"></i>
+        <span id="toastMsg">Acció realitzada amb èxit</span>
+    </div>
+
+    <!-- JAVASCRIPT DE CONTROL D'INTERFÍCIE -->
+    <script>
+        // Canvi de pestanyes de contingut
+        function switchTab(tabId) {
+            // Ocultar totes les seccions
+            const sections = ['guiarapida', 'incidencies', 'serveis', 'esalert', 'faq', 'contacte'];
+            sections.forEach(sec => {
+                const el = document.getElementById('sec-' + sec);
+                if (el) el.classList.add('hidden');
+                
+                const btn = document.getElementById('tab-' + sec);
+                if (btn) btn.classList.remove('active');
+            });
+
+            // Mostrar la secció seleccionada
+            const targetSec = document.getElementById('sec-' + tabId);
+            if (targetSec) targetSec.classList.remove('hidden');
+
+            // Activar el botó corresponent
+            const targetBtn = document.getElementById('tab-' + tabId);
+            if (targetBtn) targetBtn.classList.add('active');
+        }
+
+        // Desplegable Acordió FAQ
+        function toggleFaq(id) {
+            const content = document.getElementById('faq-content-' + id);
+            const icon = document.getElementById('faq-icon-' + id);
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Filtre de cerca en el menú lateral
+        function filterTopics() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const nav = document.getElementById('navTopics');
+            const buttons = nav.getElementsByTagName('button');
+
+            for (let btn of buttons) {
+                const text = btn.textContent.toLowerCase();
+                if (text.includes(input)) {
+                    btn.style.display = 'flex';
+                } else {
+                    btn.style.display = 'none';
+                }
+            }
+        }
+
+        // Gestió d'enviament de formulari
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            showToast("S'ha enviat el report correctament a l'equip tècnic de PROCICOORD.");
+            e.target.reset();
+        }
+
+        // Mostrar Notificació Toast
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.textContent = msg;
+            
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
