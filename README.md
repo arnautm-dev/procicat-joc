@@ -25,6 +25,7 @@ La interfície està dividida en tres blocs principals:
    - Cada element inclou tipus, ubicació, gravetat, hora i estat.
    - Els elements són botons que disparen la selecció d’una incidència concreta.
    - En marcar una incidència com a controlada, el seu risc i la seva gravetat baixen; la icona del mapa i la targeta reflecteixen el nou nivell.
+   - La creació d’una emergència nova reprodueix una notificació breu i de volum moderat, amb un interval mínim per evitar sons repetitius.
 
 2. Mapa principal
    - S’utilitza Leaflet per crear un mapa interactiu centrat a Catalunya.

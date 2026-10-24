@@ -116,6 +116,10 @@
       let esAlertMessageCatalogPromise = null;
       let esAlertMessageCatalog = null;
       let esAlertPreviewAudio = null;
+      let incidentNotificationAudio = null;
+      let lastIncidentNotificationAt = -Infinity;
+      let buttonHoverAudio = null;
+      let buttonHoverAudioWarningShown = false;
       let nextEsAlertSequence = 1;
       let nextEsAlertEventSequence = 1;
       const esAlertLevelDetails = {
@@ -1167,6 +1171,48 @@
       esAlertPhoneDialog.addEventListener("cancel", stopEsAlertPreviewAudio);
       esAlertPhoneDialog.addEventListener("close", stopEsAlertPreviewAudio);
 
+      document.addEventListener("pointerover", event => {
+        if (event.pointerType !== "mouse" || !(event.target instanceof Element)) return;
+        const button = event.target.closest("button");
+        if (!button || button.disabled || (event.relatedTarget instanceof Node && button.contains(event.relatedTarget))) return;
+        try {
+          buttonHoverAudio = buttonHoverAudio || new Audio("sounds/click.mp3");
+          buttonHoverAudio.volume = 0.2;
+          buttonHoverAudio.currentTime = 0;
+          const playback = buttonHoverAudio.play();
+          if (playback) {
+            playback.catch(error => {
+              if (buttonHoverAudioWarningShown) return;
+              buttonHoverAudioWarningShown = true;
+              console.warn("No s’ha pogut reproduir el so de botó.", error);
+            });
+          }
+        } catch (error) {
+          if (buttonHoverAudioWarningShown) return;
+          buttonHoverAudioWarningShown = true;
+          console.warn("No s’ha pogut iniciar el so de botó.", error);
+        }
+      });
+
+      function playIncidentNotification() {
+        const now = performance.now();
+        if (now - lastIncidentNotificationAt < 8000) return;
+        lastIncidentNotificationAt = now;
+        try {
+          incidentNotificationAudio = incidentNotificationAudio || new Audio("sounds/notification.mp3");
+          incidentNotificationAudio.volume = 0.35;
+          incidentNotificationAudio.currentTime = 0;
+          const playback = incidentNotificationAudio.play();
+          if (playback) {
+            playback.catch(error => {
+              console.warn("No s’ha pogut reproduir la notificació d’una nova emergència.", error);
+            });
+          }
+        } catch (error) {
+          console.warn("No s’ha pogut iniciar la notificació d’una nova emergència.", error);
+        }
+      }
+
       function markerIcon(incident, selected) {
         const color = incident.level === "critical" ? "#f05252"
           : incident.level === "high" ? "#f49a4b"
@@ -2002,6 +2048,7 @@
         markers.set(incident.id, marker);
         applyActiveEsAlertsToIncident(incident);
         refreshIncidentList();
+        playIncidentNotification();
         return incident;
       }
 
