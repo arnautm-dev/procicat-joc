@@ -2021,10 +2021,22 @@
           { type: "Emergència sanitària col·lectiva", description: "Diverses persones afectades amb necessitat de coordinació sanitària.", typeMeta: incidentTypeCatalog.medical, weight: 0.05 }
         ];
         const random = weatherModel.random || Math.random;
-        const totalTemplateWeight = templates.reduce((total, candidate) => total + candidate.weight, 0);
+        const availableMunicipalities = scenarioMunicipalityLocations.length
+          ? scenarioMunicipalityLocations
+          : fallbackScenarioMunicipalities;
+        if (availableMunicipalities.length === 0) {
+          throw new Error("No hi ha municipis amb coordenades vàlides per generar una incidència.");
+        }
+        const dryMunicipalities = availableMunicipalities.filter(municipality =>
+          getPrecipitationAt(municipality.coordinates.lat, municipality.coordinates.lng, simulation.gameTime).intensity < 1.3
+        );
+        const eligibleTemplates = templates.filter(candidate =>
+          candidate.typeMeta.id !== "forestFire" || dryMunicipalities.length > 0
+        );
+        const totalTemplateWeight = eligibleTemplates.reduce((total, candidate) => total + candidate.weight, 0);
         let templateSelection = random() * totalTemplateWeight;
-        let template = templates[templates.length - 1];
-        for (const candidate of templates) {
+        let template = eligibleTemplates[eligibleTemplates.length - 1];
+        for (const candidate of eligibleTemplates) {
           templateSelection -= candidate.weight;
           if (templateSelection < 0) {
             template = candidate;
@@ -2032,18 +2044,12 @@
           }
         }
         const isPopulationSensitive = template.typeMeta.id === "forestFire" || template.typeMeta.id === "chemical";
-        const availableMunicipalities = scenarioMunicipalityLocations.length
-          ? scenarioMunicipalityLocations
-          : fallbackScenarioMunicipalities;
-        const municipalities = availableMunicipalities.map(municipality => ({
+        const municipalities = (template.typeMeta.id === "forestFire" ? dryMunicipalities : availableMunicipalities).map(municipality => ({
           ...municipality,
           weight: isPopulationSensitive
             ? municipalityPopulationWeights.get(normalizeAdministrativeName(municipality.feature.properties.nom_municipi)) || 1
             : 1
         }));
-        if (municipalities.length === 0) {
-          throw new Error("No hi ha municipis amb coordenades vàlides per generar una incidència.");
-        }
         const totalWeight = municipalities.reduce((total, municipality) => total + municipality.weight, 0);
         let selection = random() * totalWeight;
         let selectedMunicipality = municipalities[municipalities.length - 1];
@@ -2217,7 +2223,24 @@
             ? -0.75 - Math.min(incident.resourcesAssigned, 6) * 0.1
             : 0.18;
           const controlModifier = incident.state === "Controlat" ? -0.45 : 0;
-          const riskDelta = (trend + threat + resourceModifier + controlModifier) * factor;
+          const localPrecipitation = incident.typeKey === "forestFire"
+            ? getPrecipitationAt(incident.coordinates[0], incident.coordinates[1], simulation.gameTime)
+            : null;
+          const rainSuppressingFire = localPrecipitation && localPrecipitation.intensity >= 1.3;
+          if (rainSuppressingFire && incident.rainSuppressionStormId !== localPrecipitation.stormId) {
+            incident.rainSuppressionStormId = localPrecipitation.stormId;
+            if (lowerIncidentSeverity(incident)) {
+              incident.update = `La pluja (${localPrecipitation.intensity.toFixed(1)} mm/h) redueix la gravetat de l’incendi forestal.`;
+              incident.history.unshift({ time: formatSimulationClock(), text: incident.update });
+              refreshIncidentMarker(incident);
+              shouldRefreshIncidentList = true;
+              incidentDetailsChanged = true;
+            }
+          }
+          const rainSuppression = rainSuppressingFire
+            ? Math.max(1.7, Math.min(4, 1.4 + localPrecipitation.intensity * 0.15))
+            : 0;
+          const riskDelta = (trend + threat + resourceModifier + controlModifier - rainSuppression) * factor;
           incident.risk = Math.max(6, Math.min(96, (incident.risk || 50) + riskDelta));
 
           const nextSeverity = getStableIncidentSeverity(
