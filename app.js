@@ -2433,11 +2433,36 @@
 
       initializeSimulation();
 
+      function normalizeSearchText(value) {
+        return String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLocaleLowerCase("ca")
+          .trim();
+      }
+
       renderIncidentList = function() {
         if (!list) return;
         const severityOrder = { critical: 4, high: 3, warning: 2, moderate: 1, low: 0 };
         const sortMode = document.getElementById("incident-sort").value;
-        const visibleIncidents = getActiveIncidents().sort((a, b) => {
+        const activeIncidents = getActiveIncidents();
+        const searchTerms = normalizeSearchText(document.getElementById("incident-search").value)
+          .split(/\s+/)
+          .filter(Boolean);
+        const visibleIncidents = activeIncidents.filter(incident => {
+          if (searchTerms.length === 0) return true;
+          const searchableText = normalizeSearchText([
+            incident.id,
+            incident.type,
+            incident.shortLocation,
+            incident.location,
+            incident.description,
+            incident.update,
+            incident.state,
+            incident.severity
+          ].join(" "));
+          return searchTerms.every(term => searchableText.includes(term));
+        }).sort((a, b) => {
           if (sortMode === "type") return a.type.localeCompare(b.type, "ca");
           if (sortMode === "newest") return b.createdAt - a.createdAt;
           if (sortMode === "oldest") return a.createdAt - b.createdAt;
@@ -2445,20 +2470,25 @@
         });
         const countBadge = document.querySelector(".count-badge");
         if (countBadge) {
-          countBadge.textContent = String(visibleIncidents.length);
-          countBadge.setAttribute("aria-label", `${visibleIncidents.length} emergències`);
+          countBadge.textContent = String(activeIncidents.length);
+          countBadge.setAttribute("aria-label", `${activeIncidents.length} emergències`);
         }
 
         list.innerHTML = "";
         if (visibleIncidents.length === 0) {
           const emptyState = document.createElement("div");
           emptyState.className = "list-caption";
-          emptyState.textContent = simulation.started
-            ? "Esperant noves emergències..."
-            : "Inicia el torn per rebre emergències";
+          if (searchTerms.length > 0) {
+            emptyState.textContent = "No s’han trobat emergències.";
+          } else {
+            emptyState.textContent = simulation.started
+              ? "Esperant noves emergències..."
+              : "Inicia el torn per rebre emergències";
+          }
           list.append(emptyState);
           return;
         }
+        const incidentCards = document.createDocumentFragment();
         for (const incident of visibleIncidents) {
           hydrateIncident(incident);
           const button = document.createElement("button");
@@ -2480,12 +2510,14 @@
               <span>${incident.time || formatSimulationClock()}</span>
             </span>`;
           button.addEventListener("click", () => selectIncident(incident.id, true));
-          list.append(button);
+          incidentCards.append(button);
         }
+        list.append(incidentCards);
       };
 
       refreshIncidentList = renderIncidentList;
 
+      document.getElementById("incident-search").addEventListener("input", renderIncidentList);
       document.getElementById("incident-sort").addEventListener("change", renderIncidentList);
       renderIncidentList();
       if (selectedId) setTimeout(() => selectIncident(selectedId, false), 80);

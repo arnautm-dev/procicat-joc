@@ -273,8 +273,19 @@
         flex: 0 0 auto;
       }
 
-      .search-box span {
+      .search-box input {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--color-text);
         font-size: 11px;
+      }
+
+      .search-box input::placeholder {
+        color: var(--color-text-subtle);
+        opacity: 1;
       }
 
       .filter-row {
