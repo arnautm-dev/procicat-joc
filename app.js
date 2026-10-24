@@ -23,6 +23,17 @@
           actionList: ["Activar plans de sanejament", "Tancar passos inundats", "Desviar trànsit"],
           summary: "Afectació a zones baixes amb risc de bloqueig viari i danys de serveis."
         },
+        waterAccumulation: {
+          id: "waterAccumulation",
+          name: "Acumulació d’aigua",
+          icon: "💧",
+          color: "#58a9e8",
+          defaultRisk: 48,
+          spread: 0.45,
+          populationRisk: 0.52,
+          actionList: ["Verificar punts baixos", "Balissar acumulacions", "Coordinar afectacions viàries"],
+          summary: "Acumulació local d’aigua amb possibles afectacions a la mobilitat."
+        },
         rain: {
           id: "rain",
           name: "Pluges molt intenses",
@@ -210,7 +221,8 @@
         seed: null,
         storms: [],
         startedAt: null,
-        lastIncidentCheck: null,
+        nextStormAt: null,
+        nextStormSequence: 0,
         createdEpisodes: new Set(),
         random: null
       };
@@ -243,26 +255,40 @@
         const random = createSeededRandom(weatherModel.seed);
         weatherModel.random = random;
         weatherModel.startedAt = simulation.gameTime;
-        weatherModel.lastIncidentCheck = simulation.gameTime;
+        weatherModel.nextStormAt = simulation.gameTime + (25 + random() * 95) * 60 * 1000;
+        weatherModel.nextStormSequence = 0;
         weatherModel.createdEpisodes = new Set();
-        weatherModel.storms = Array.from({ length: 9 }, (_, index) => ({
-          id: `storm-${index + 1}`,
-          latitude: 40.75 + random() * 2.1,
-          longitude: 0.35 + random() * 3.0,
-          driftLatitude: (random() - 0.5) * 0.28,
-          driftLongitude: (random() - 0.5) * 0.55,
-          radiusKm: 10 + random() * 38,
-          intensity: 5 + random() * 33,
-          startOffset: (random() * 240 - 120) * 60 * 1000,
-          duration: (75 + random() * 170) * 60 * 1000,
-          phase: random() * Math.PI * 2,
-          orientation: (random() - 0.5) * Math.PI,
-          elongation: 1 + random() * 1.3
-        }));
+        weatherModel.storms = [];
+      }
+
+      function evolveWeatherModel() {
+        if (weatherModel.seed === null) return;
+        while (simulation.gameTime >= weatherModel.nextStormAt) {
+          const stormStart = weatherModel.nextStormAt;
+          weatherModel.nextStormSequence += 1;
+          weatherModel.storms.push({
+            id: `storm-${weatherModel.nextStormSequence}`,
+            latitude: 40.55 + weatherModel.random() * 2.25,
+            longitude: 0.15 + weatherModel.random() * 3.3,
+            driftLatitude: (weatherModel.random() - 0.5) * 0.28,
+            driftLongitude: (weatherModel.random() - 0.5) * 0.55,
+            radiusKm: 8 + weatherModel.random() * 34,
+            intensity: 4 + weatherModel.random() ** 1.7 * 34,
+            startOffset: stormStart - weatherModel.startedAt,
+            duration: (35 + weatherModel.random() * 145) * 60 * 1000,
+            phase: weatherModel.random() * Math.PI * 2,
+            orientation: (weatherModel.random() - 0.5) * Math.PI,
+            elongation: 1 + weatherModel.random() * 1.3
+          });
+          weatherModel.nextStormAt = stormStart + (45 + weatherModel.random() * 165) * 60 * 1000;
+        }
+        weatherModel.storms = weatherModel.storms.filter(storm =>
+          weatherModel.startedAt + storm.startOffset + storm.duration + 3 * 3600000 >= simulation.gameTime
+        );
       }
 
       function getStormPosition(storm, timestamp) {
-        const elapsedHours = (timestamp - weatherModel.startedAt) / 3600000;
+        const elapsedHours = (timestamp - weatherModel.startedAt - storm.startOffset) / 3600000;
         return {
           latitude: storm.latitude + storm.driftLatitude * elapsedHours,
           longitude: storm.longitude + storm.driftLongitude * elapsedHours
@@ -1541,6 +1567,7 @@
         if (directMatch) return directMatch;
         if (input.includes("incendi")) return incidentTypeCatalog.forestFire;
         if (input.includes("inund") || input.includes("riuada") || input.includes("riu")) return incidentTypeCatalog.flood;
+        if (input.includes("acumul")) return incidentTypeCatalog.waterAccumulation;
         if (input.includes("pluj") || input.includes("plug") || input.includes("tempest")) return incidentTypeCatalog.rain;
         if (input.includes("tr\xe0nsit") || input.includes("accident") && input.includes("carretera")) return incidentTypeCatalog.traffic;
         if (input.includes("qu\xedmic") || input.includes("quimic")) return incidentTypeCatalog.chemical;
@@ -1832,6 +1859,7 @@
       const incidentResourceOptions = {
         forestFire: ["Bombers", "Agents Rurals", "Protecció Civil", "Mossos d’Esquadra"],
         flood: ["Bombers", "Protecció Civil", "Mossos d’Esquadra", "Agència Catalana de l’Aigua"],
+        waterAccumulation: ["Bombers", "Protecció Civil", "Mossos d’Esquadra", "Agència Catalana de l’Aigua"],
         rain: ["Bombers", "Protecció Civil", "Mossos d’Esquadra", "Agència Catalana de l’Aigua"],
         traffic: ["SEM", "Mossos d’Esquadra", "Bombers", "Protecció Civil"],
         chemical: ["Bombers", "Mossos d’Esquadra", "SEM", "Protecció Civil"],
@@ -1840,6 +1868,7 @@
       const incidentResolutionMinutes = {
         forestFire: 360,
         flood: 240,
+        waterAccumulation: 150,
         rain: 180,
         traffic: 120,
         chemical: 480,
@@ -2072,7 +2101,7 @@
             coordinates: { lat: incident.coordinates[0], lng: incident.coordinates[1] }
           });
           incident.accumulatedRainfall = Math.max(incident.accumulatedRainfall || 0, exposure.accumulatedRainfall);
-          const nextRisk = Math.max(incident.risk || 0, Math.min(96, 38 + exposure.risk));
+          const nextRisk = Math.max(incident.risk || 0, Math.min(96, 35 + exposure.risk * 0.7));
           const nextSeverity = getStableIncidentSeverity(nextRisk, incident.level);
           if (nextSeverity.severity !== incident.severity) {
             incident.risk = nextRisk;
@@ -2094,52 +2123,72 @@
         const impactedMunicipalities = municipalities.map(municipality => ({
           municipality,
           exposure: evaluateWeatherExposure(municipality)
-        })).filter(({ exposure }) => exposure.risk >= 24 && exposure.stormId);
+        })).filter(({ exposure }) =>
+          exposure.stormId &&
+          exposure.risk >= 55 &&
+          (
+            exposure.precipitation.intensity >= 20 && exposure.accumulatedRainfall >= 7 ||
+            exposure.precipitation.intensity >= 12 && exposure.accumulatedRainfall >= 18 ||
+            exposure.accumulatedRainfall >= 30
+          )
+        );
         if (!impactedMunicipalities.length) return false;
 
         impactedMunicipalities.sort((a, b) => b.exposure.risk - a.exposure.risk);
-        const candidates = impactedMunicipalities.slice(0, Math.min(8, impactedMunicipalities.length));
-        const selected = candidates[Math.floor(weatherModel.random() * candidates.length)];
+        const selected = impactedMunicipalities[0];
         const { municipality, exposure } = selected;
         const municipalityName = municipality.feature.properties.nom_municipi;
         const countyName = municipality.feature.properties.nom_comarca;
-        const municipalityKey = municipality.feature.properties.codi_municipi_5 || normalizeAdministrativeName(municipalityName);
-        const episodeKey = `${exposure.stormId}:${municipalityKey}`;
+        const episodeKey = exposure.stormId;
         const existingIncident = incidents.find(incident =>
-          incident.weatherEpisodeKey === episodeKey && !isIncidentResolved(incident)
+          incident.weatherStormId === episodeKey && !isIncidentResolved(incident)
         );
         if (existingIncident) {
-          existingIncident.accumulatedRainfall = Math.max(existingIncident.accumulatedRainfall || 0, exposure.accumulatedRainfall);
-          existingIncident.risk = Math.max(existingIncident.risk, Math.min(96, 38 + exposure.risk));
+          const previousRainfall = existingIncident.accumulatedRainfall || 0;
+          existingIncident.accumulatedRainfall = Math.max(previousRainfall, exposure.accumulatedRainfall);
+          existingIncident.risk = Math.max(existingIncident.risk, Math.min(96, 35 + exposure.risk * 0.7));
+          if (existingIncident.accumulatedRainfall >= previousRainfall + 3) {
+            existingIncident.update = `La pluja s’intensifica a ${municipalityName}: ${exposure.precipitation.intensity.toFixed(1)} mm/h i ${existingIncident.accumulatedRainfall.toFixed(1)} mm acumulats.`;
+            existingIncident.history.unshift({ time: formatSimulationClock(), text: existingIncident.update });
+            refreshIncidentMarker(existingIncident);
+            refreshIncidentList();
+          }
           return true;
         }
         if (weatherModel.createdEpisodes.has(episodeKey)) return true;
 
-        const occurrenceChance = Math.min(0.82, 0.2 + exposure.risk / 150);
-        if (weatherModel.random() > occurrenceChance) return true;
         weatherModel.createdEpisodes.add(episodeKey);
-        const incidentRisk = Math.min(96, Math.round(38 + exposure.risk));
+        const occurrenceChance = Math.min(0.2, 0.06 + Math.max(0, exposure.risk - 55) * 0.0035);
+        if (weatherModel.random() > occurrenceChance) return true;
+        const isFlood = exposure.accumulatedRainfall >= 30 || exposure.precipitation.intensity >= 32;
+        const isWaterAccumulation = !isFlood &&
+          exposure.precipitation.intensity >= 12 &&
+          exposure.accumulatedRainfall >= 18;
+        const incidentType = isFlood
+          ? "Inundació urbana"
+          : isWaterAccumulation ? "Acumulació d’aigua" : "Pluges molt intenses";
+        const incidentRisk = Math.min(96, Math.round(35 + exposure.risk * 0.7));
         const severity = getSeverityFromRisk(incidentRisk);
         const rainfallDescription = `Pluja de ${exposure.precipitation.intensity.toFixed(1)} mm/h i acumulació de ${exposure.accumulatedRainfall.toFixed(1)} mm.`;
         const incident = createIncident({
           id: `INC-PL-${Math.floor(simulation.gameTime)}-${weatherModel.createdEpisodes.size}`,
-          type: "Inundació urbana",
+          type: incidentType,
           shortLocation: municipalityName,
           location: `${municipalityName} · ${countyName}`,
           coordinates: [municipality.coordinates.lat, municipality.coordinates.lng],
-          description: `Inundació amb afectació potencial a zones baixes. ${rainfallDescription}`,
+          description: `${isFlood ? "Possible inundació amb afectació a punts baixos i vies" : isWaterAccumulation ? "Acumulació d’aigua amb possible afectació a la mobilitat" : "Precipitació intensa amb risc local d’acumulació d’aigua"} a ${municipalityName}. ${rainfallDescription}`,
           severity: severity.severity,
           level: severity.level,
           state: "Detectat",
           risk: incidentRisk,
           calls: "1 comunicació del 112",
           services: [],
-          update: "Avís del 112: acumulació d’aigua reportada; es verifica l’afectació al municipi.",
+          update: "Seguiment d’una afectació meteorològica confirmada pel radar.",
           time: formatSimulationClock(),
           weatherStormId: exposure.stormId,
           weatherEpisodeKey: episodeKey,
           accumulatedRainfall: exposure.accumulatedRainfall,
-          history: [{ time: formatSimulationClock(), text: "Avís del 112 rebut després de precipitacions intenses a la zona." }]
+          history: [{ time: formatSimulationClock(), text: `Incidència generada per precipitació intensa detectada al radar. ${rainfallDescription}` }]
         });
         if (incident && selectedId === incident.id) renderDetail(incident);
         return true;
@@ -2157,6 +2206,7 @@
           const threat = {
             forestFire: 0.8,
             flood: 0.55,
+            waterAccumulation: 0.42,
             rain: 0.4,
             traffic: 0.38,
             chemical: 0.7,
@@ -2243,6 +2293,7 @@
         const realSeconds = elapsed / 1000;
         const gameSeconds = realSeconds * (simulation.speedRates[simulation.speed] || 1);
         simulation.gameTime += gameSeconds * 1000;
+        evolveWeatherModel();
         updateSimulationClock();
         evolveIncidents(gameSeconds);
 

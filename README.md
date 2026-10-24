@@ -58,7 +58,7 @@ Les incidències es defineixen com a objectes literals en JavaScript, amb camps 
 
 Aquestes dades es carreguen a la memòria en iniciar l’aplicació i es renderitzen tant en el llistat com en el mapa. L’estat de la UI es gestiona a partir de variables globals com `selectedId`, `activeLayerName` i `markers`.
 
-La simulació genera incidències als municipis disponibles: inundacions, tempestes, accidents de trànsit i emergències sanitàries tenen el mateix pes per municipi. Els incendis i accidents químics ponderen la selecció amb factors relatius de població aproximats per als principals nuclis urbans; la resta de municipis continuen sent candidats amb un pes base.
+La simulació genera incidents d’escenari als municipis disponibles: accidents de trànsit i emergències sanitàries tenen el mateix pes per municipi; els incendis i accidents químics ponderen la selecció amb factors relatius de població aproximats per als principals nuclis urbans. La pluja segueix un model independent d’episodis variables: els fronts apareixen durant el torn, es desplacen i evolucionen en intensitat i durada. Només poden originar una incidència per episodi quan la intensitat o l’acumulació justifica una afectació, i els episodis fallits o sense afectacions no generen avisos meteorològics.
 
 Entre els tipus que escull el generador automàtic d’escenaris, les emergències sanitàries col·lectives són molt poc freqüents: tenen un pes de 0,05, en comparació amb el pes 1 dels altres tres tipus, cosa que representa aproximadament un 1,6% d’aquestes incidències.
 
@@ -88,7 +88,7 @@ Això permet localitzar ràpidament qualsevol entitat i valora la validació d�
 El sistema incorpora una capa de comarques per a ES-Alert i una capa de radar de precipitació:
 
 - `alert`: mostra les alertes actives per comarca i permet seleccionar-ne diverses amb el mapa. El contorn turquesa identifica la selecció; el farcit groc, taronja o vermell identifica el nivell d’una alerta activa.
-- `radar`: mostra la previsió de precipitació de la simulació.
+- `radar`: mostra la previsió de precipitació de la simulació, inclosos els episodis que comencen o s’intensifiquen durant el torn.
 
 ### Gestió d’ES-Alert
 
